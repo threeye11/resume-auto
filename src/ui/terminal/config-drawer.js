@@ -32,13 +32,19 @@ export function mountConfigDrawer(root, { store, onSave }) {
       continue;
     }
 
+    const field = document.createElement('div');
+    field.className = 'ra-field';
+
     const lab = document.createElement('label');
+    lab.className = 'ra-label';
     lab.textContent = label;
-    drawer.appendChild(lab);
+    field.appendChild(lab);
+
     let el;
     if (type === 'textarea') {
       el = document.createElement('textarea');
       el.value = cfg[key] ?? '';
+      el.placeholder = '投递成功后可选发送…';
     } else {
       el = document.createElement('input');
       el.type = type === 'number' ? 'number' : 'text';
@@ -46,10 +52,13 @@ export function mountConfigDrawer(root, { store, onSave }) {
       if (type === 'number') {
         el.min = '0';
         el.step = '1';
+      } else {
+        el.placeholder = '逗号分隔，留空不限';
       }
     }
+    field.appendChild(el);
+    drawer.appendChild(field);
     inputs[key] = { el, type };
-    drawer.appendChild(el);
   }
 
   const saveBtn = document.createElement('button');

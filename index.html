@@ -8,9 +8,10 @@
     body {
       margin: 0;
       min-height: 100vh;
-      background: #010409;
-      color: #e6edf3;
-      font-family: ui-sans-serif, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #121212;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+        'PingFang SC', 'Microsoft YaHei', sans-serif;
     }
     .wrap {
       max-width: 720px;
@@ -18,38 +19,32 @@
       padding: 48px 24px;
     }
     h1 {
-      font-size: 22px;
-      font-weight: 650;
+      font-size: 20px;
+      font-weight: 600;
       margin: 0 0 8px;
-      letter-spacing: 0.01em;
     }
-    p {
-      color: #8b949e;
-      line-height: 1.6;
-      margin: 0 0 12px;
+    p, li {
+      color: #a0a0a0;
+      line-height: 1.7;
+      font-size: 13px;
     }
     code {
-      background: #161b22;
-      border: 1px solid #30363d;
+      background: #2c2c35;
       border-radius: 4px;
       padding: 1px 6px;
       font-size: 12px;
-    }
-    ul {
-      color: #8b949e;
-      line-height: 1.8;
-      padding-left: 1.2em;
+      color: #e0e0e0;
     }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>resume-auto · 浮层终端预览</h1>
-    <p>右下角为 mock 终端，可试：折叠/展开、配置抽屉、导出、开始（打演示日志）。</p>
+    <p>右下角为 mock 终端。可试：折叠/展开、配置抽屉、开始（打演示日志）。</p>
     <ul>
-      <li>点「— 折叠」收成绿色悬浮球，再点球任意位置应能展开</li>
-      <li>点「⚙ 配置」打开抽屉，保存后按钮会闪一下「已保存」</li>
-      <li>生产入口仍是 <code>src/index.user.js</code> → <code>npm run build</code></li>
+      <li>主操作：开始 / 暂停 / 停止（连体按钮组）</li>
+      <li>次操作：配置 / 导出 / 折叠</li>
+      <li>折叠后点绿色悬浮球可再次展开</li>
     </ul>
   </div>
   <script type="module" src="/src/ui/preview.js"></script>

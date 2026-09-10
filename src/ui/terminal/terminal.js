@@ -18,19 +18,26 @@ export function mountTerminal({ logger, store, controls }) {
   root.setAttribute('aria-label', 'resume-auto 控制台');
   root.innerHTML = `
     <div class="ra-header">
-      <span class="ra-title" id="ra-title">resume-auto</span>
+      <span class="ra-title" id="ra-title">
+        <span class="ra-title-dot" aria-hidden="true"></span>
+        <span id="ra-title-text">resume-auto</span>
+      </span>
       <span class="ra-status" id="ra-status">空闲</span>
+    </div>
+    <div class="ra-actions">
+      <div class="ra-group">
+        <button type="button" class="ra-btn primary" data-act="start">开始</button>
+        <button type="button" class="ra-btn" data-act="pause">暂停</button>
+        <button type="button" class="ra-btn danger" data-act="stop">停止</button>
+      </div>
+      <div class="ra-group-sec">
+        <button type="button" class="ra-btn ghost" data-act="config">配置</button>
+        <button type="button" class="ra-btn ghost" data-act="export">导出</button>
+        <button type="button" class="ra-btn ghost" data-act="collapse">折叠</button>
+      </div>
     </div>
     <div class="ra-body" id="ra-body">
       <div class="ra-empty" id="ra-empty">等待开始 · 日志会显示在这里</div>
-    </div>
-    <div class="ra-actions">
-      <button type="button" class="ra-btn primary" data-act="start">▶ 开始</button>
-      <button type="button" class="ra-btn" data-act="pause">⏸ 暂停</button>
-      <button type="button" class="ra-btn" data-act="stop">⏹ 停止</button>
-      <button type="button" class="ra-btn" data-act="config">⚙ 配置</button>
-      <button type="button" class="ra-btn" data-act="export">⇩ 导出</button>
-      <button type="button" class="ra-btn ghost" data-act="collapse">— 折叠</button>
     </div>
   `;
   document.body.appendChild(root);
@@ -38,7 +45,7 @@ export function mountTerminal({ logger, store, controls }) {
   const body = root.querySelector('#ra-body');
   const emptyEl = root.querySelector('#ra-empty');
   const statusEl = root.querySelector('#ra-status');
-  const titleEl = root.querySelector('#ra-title');
+  const titleText = root.querySelector('#ra-title-text');
   const drawer = mountConfigDrawer(root, { store });
 
   (function enableDrag(handle) {
@@ -68,10 +75,9 @@ export function mountTerminal({ logger, store, controls }) {
 
   function setCollapsed(collapsed) {
     root.classList.toggle('ra-collapsed', collapsed);
-    titleEl.textContent = collapsed ? TITLE_COLLAPSED : 'resume-auto';
+    titleText.textContent = collapsed ? TITLE_COLLAPSED : 'resume-auto';
   }
 
-  // 单一点击委托：折叠态下点球任意位置展开
   root.addEventListener('click', (e) => {
     if (root.classList.contains('ra-collapsed')) {
       setCollapsed(false);
@@ -106,7 +112,7 @@ export function mountTerminal({ logger, store, controls }) {
   });
 
   const un = logger.on('*', (payload, entry) => {
-    if (emptyEl) emptyEl.remove();
+    if (emptyEl?.isConnected) emptyEl.remove();
     appendLog(body, entry);
     if (entry.type === 'progress') {
       statusEl.textContent = `投递中 ${entry.payload.done}/${entry.payload.total}`;
