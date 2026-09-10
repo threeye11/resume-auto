@@ -14,6 +14,9 @@ export function createPipeline({ adapter, store, logger }) {
     failStreakLimit: 5,
     onError: (err, index) => {
       logger.emit('error', { where: 'pipeline', index, msg: err.message || String(err) });
+    },
+    onStreak: (failStreak) => {
+      logger.emit('error', { where: 'streak', msg: '连续失败自动暂停', failStreak });
     }
   });
 
@@ -28,7 +31,6 @@ export function createPipeline({ adapter, store, logger }) {
     running = true;
     const cfg = store.getConfig();
     const jobs = adapter.extractList();
-    logger.emit('scan', { count: jobs.length });
 
     const dedupe = createDedupe(store, {
       isApplied: (id) => {
@@ -88,8 +90,10 @@ export function createPipeline({ adapter, store, logger }) {
     try {
       await scheduler.run(tasks);
     } finally {
-      running = false;
-      logger.emit('done', { ok, skip, fail });
+      if (scheduler.state() !== 'paused') {
+        running = false;
+        logger.emit('done', { ok, skip, fail });
+      }
     }
   }
 

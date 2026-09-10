@@ -6,11 +6,13 @@ function rand(min, max) {
  * @param {object} opts
  * @param {() => number} [opts.delayMs]
  * @param {(err: Error, index: number) => void} [opts.onError]
+ * @param {(failStreak: number) => void} [opts.onStreak]
  * @param {number} [opts.failStreakLimit]
  */
 export function createScheduler({
   delayMs = () => rand(800, 2000),
   onError = () => {},
+  onStreak = () => {},
   failStreakLimit = 5
 } = {}) {
   let status = 'idle'; // idle | running | paused | stopped
@@ -23,6 +25,7 @@ export function createScheduler({
   function resume() {
     if (status === 'paused') {
       status = 'running';
+      failStreak = 0;
       if (pausedResolve) { pausedResolve(); pausedResolve = null; }
     }
   }
@@ -66,7 +69,10 @@ export function createScheduler({
         onError(e, i);
         if (failStreak >= failStreakLimit) {
           status = 'paused';
-          break;
+          onStreak(failStreak);
+          await waitIfPaused();
+          if (stopFlag) break;
+          failStreak = 0;
         }
       }
     }

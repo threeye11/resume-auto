@@ -20,7 +20,10 @@ function boot() {
         ui.setStatus('投递中…');
         pipeline.start();
       },
-      onPause: () => pipeline.pause(),
+      onPause: () => {
+        pipeline.pause();
+        ui.setStatus('已暂停');
+      },
       onStop: () => {
         pipeline.stop();
         ui.setStatus('已停止');
