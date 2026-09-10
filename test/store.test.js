@@ -30,6 +30,17 @@ test('applied 去重写入', () => {
 });
 
 test('quota 跨日清零', () => {
+  let d = '2099-01-01';
+  const s = createStore(memBackend(), { today: () => d });
+  s.addQuota(1);
+  s.addQuota(2);
+  assert.equal(s.getQuota().count, 3);
+  d = '2099-01-02';
+  assert.equal(s.getQuota().count, 0);
+  assert.equal(s.getQuota().date, '2099-01-02');
+});
+
+test('resetQuotaForDate 显式清零', () => {
   const s = createStore(memBackend(), { today: () => '2099-01-01' });
   s.addQuota(1);
   s.addQuota(2);

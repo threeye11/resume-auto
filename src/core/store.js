@@ -100,10 +100,18 @@ export function gmBackend() {
       }
     },
     set: (k, v) => {
-      GM_setValue(k, v);
+      try {
+        GM_setValue(k, v);
+      } catch {
+        /* noop */
+      }
     },
     del: (k) => {
-      GM_deleteValue(k);
+      try {
+        GM_deleteValue(k);
+      } catch {
+        /* noop */
+      }
     }
   };
 }
