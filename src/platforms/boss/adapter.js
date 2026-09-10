@@ -1,4 +1,5 @@
 import { SEL, textOf, makeId } from './selectors.js';
+import { applyJob, sendGreeting } from './actions.js';
 
 export function createBossAdapter({ logger } = {}) {
   function matchHost() {
@@ -38,7 +39,7 @@ export function createBossAdapter({ logger } = {}) {
     matchHost,
     extractList,
     isApplied,
-    apply: async () => 'fail',
-    sendGreeting: async () => 'fail'
+    apply: (job) => applyJob(job, { logger }),
+    sendGreeting: (job, greeting) => sendGreeting(job, greeting, { logger })
   };
 }

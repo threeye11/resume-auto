@@ -5,6 +5,8 @@ const logger = createLogger();
 logger.on('*', (p, e) => console.debug('[ra]', e.type, p));
 
 const adapter = createBossAdapter({ logger });
+window.__ra = { adapter, logger };
+
 if (adapter.matchHost()) {
   setTimeout(() => {
     const jobs = adapter.extractList();
