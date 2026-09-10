@@ -88,6 +88,7 @@ export function mountTerminal({ logger, store, controls }) {
     }
     if (entry.type === 'done') statusEl.textContent = '已结束';
     if (entry.type === 'quota' && entry.payload.stopped) statusEl.textContent = '配额用尽';
+    if (entry.type === 'error' && entry.payload.where === 'streak') statusEl.textContent = '已暂停(连续失败)';
   });
 
   function setStatus(s) {
