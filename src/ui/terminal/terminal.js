@@ -3,6 +3,17 @@ import { mountConfigDrawer } from './config-drawer.js';
 import styles from './styles.css?raw';
 
 const DRAG_THRESHOLD = 5;
+const EDGE_MARGIN = 8;
+
+const ICON_MAXIMIZE = `
+<svg class="ra-ico" viewBox="0 0 12 12" aria-hidden="true">
+  <rect x="1.5" y="1.5" width="9" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/>
+</svg>`;
+const ICON_RESTORE = `
+<svg class="ra-ico" viewBox="0 0 12 12" aria-hidden="true">
+  <rect x="1.5" y="3.2" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>
+  <path d="M3.5 3.2V2.5a1 1 0 0 1 1-1H9.5a1 1 0 0 1 1 1V7a1 1 0 0 1-1 1h-.7" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+</svg>`;
 
 /** 折叠球上的短状态码 */
 function ballBadgeFromText(text) {
@@ -14,6 +25,11 @@ function ballBadgeFromText(text) {
   if (/就绪|空闲|ready/i.test(t)) return { code: 'IDLE', tone: 'idle' };
   if (/错误|失败|fail/i.test(t)) return { code: 'ERR', tone: 'err' };
   return { code: 'RA', tone: 'idle' };
+}
+
+function clamp(n, min, max) {
+  if (max < min) return min;
+  return Math.min(Math.max(n, min), max);
 }
 
 export function mountTerminal({ logger, store, controls }) {
@@ -35,6 +51,14 @@ export function mountTerminal({ logger, store, controls }) {
         <span id="ra-title-text">resume-auto</span>
       </span>
       <span class="ra-status" id="ra-status">空闲</span>
+      <span class="ra-win-btns">
+        <button type="button" class="ra-win-btn" data-act="maximize" title="最大化" aria-label="最大化">${ICON_MAXIMIZE}</button>
+        <button type="button" class="ra-win-btn" data-act="collapse" title="折叠" aria-label="折叠">
+          <svg class="ra-ico" viewBox="0 0 12 12" aria-hidden="true">
+            <path d="M2.5 8.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </span>
     </div>
     <div class="ra-actions">
       <div class="ra-group">
@@ -64,11 +88,15 @@ export function mountTerminal({ logger, store, controls }) {
   const ballEl = root.querySelector('#ra-ball');
   const ballCode = root.querySelector('#ra-ball-code');
   const header = root.querySelector('.ra-header');
+  const maxBtn = root.querySelector('[data-act="maximize"]');
   const drawer = mountConfigDrawer(root, { store });
 
   let statusText = '空闲';
   let collapsed = false;
+  let maximized = false;
   let suppressClick = false;
+  /** @type {{left:number,top:number,width:string,height:string}|null} */
+  let restoreBox = null;
 
   function applyBallBadge(text) {
     const { code, tone } = ballBadgeFromText(text);
@@ -77,7 +105,75 @@ export function mountTerminal({ logger, store, controls }) {
     ballEl.title = text || '';
   }
 
+  /** 保证至少 EDGE_MARGIN 像素仍在视口内，防止拖出边界找不回 */
+  function clampToViewport() {
+    if (maximized || collapsed) return;
+    const r = root.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const w = r.width;
+    const h = r.height;
+    const left = clamp(r.left, EDGE_MARGIN - w + 48, vw - EDGE_MARGIN - 24);
+    const top = clamp(r.top, EDGE_MARGIN, vh - EDGE_MARGIN - 32);
+    root.style.right = 'auto';
+    root.style.bottom = 'auto';
+    root.style.left = `${left}px`;
+    root.style.top = `${top}px`;
+  }
+
+  function setMaximized(next) {
+    if (next === maximized) return;
+    if (next) {
+      if (collapsed) setCollapsed(false);
+      const r = root.getBoundingClientRect();
+      restoreBox = {
+        left: r.left,
+        top: r.top,
+        width: root.style.width || `${r.width}px`,
+        height: root.style.height || ''
+      };
+      maximized = true;
+      root.classList.add('ra-maximized');
+      root.style.left = '';
+      root.style.top = '';
+      root.style.right = '';
+      root.style.bottom = '';
+      root.style.width = '';
+      root.style.height = '';
+      if (maxBtn) {
+        maxBtn.dataset.act = 'restore';
+        maxBtn.title = '向下还原';
+        maxBtn.setAttribute('aria-label', '向下还原');
+        maxBtn.innerHTML = ICON_RESTORE;
+      }
+    } else {
+      maximized = false;
+      root.classList.remove('ra-maximized');
+      if (restoreBox) {
+        root.style.left = `${restoreBox.left}px`;
+        root.style.top = `${restoreBox.top}px`;
+        root.style.right = 'auto';
+        root.style.bottom = 'auto';
+        if (restoreBox.width) root.style.width = restoreBox.width;
+        if (restoreBox.height) root.style.height = restoreBox.height;
+      } else {
+        root.style.left = '';
+        root.style.top = '';
+        root.style.right = '16px';
+        root.style.bottom = '16px';
+      }
+      clampToViewport();
+      if (maxBtn) {
+        maxBtn.dataset.act = 'maximize';
+        maxBtn.title = '最大化';
+        maxBtn.setAttribute('aria-label', '最大化');
+        maxBtn.innerHTML = ICON_MAXIMIZE;
+      }
+    }
+  }
+
   function setCollapsed(next) {
+    if (next && maximized) setMaximized(false);
     collapsed = next;
     root.classList.toggle('ra-collapsed', next);
     ballEl.hidden = !next;
@@ -86,6 +182,7 @@ export function mountTerminal({ logger, store, controls }) {
     header.style.display = next ? 'none' : '';
     titleText.textContent = next ? 'RA' : 'resume-auto';
     applyBallBadge(statusText);
+    if (!next) clampToViewport();
   }
 
   function setStatus(s) {
@@ -94,13 +191,13 @@ export function mountTerminal({ logger, store, controls }) {
     applyBallBadge(s);
   }
 
-  // 拖拽：展开用 header，折叠球用 ball；超过阈值才移动，否则视为点击展开
   function enableDrag(handle) {
     if (!handle) return;
     let sx = 0, sy = 0, ox = 0, oy = 0, pending = false, dragging = false;
 
     handle.addEventListener('mousedown', (e) => {
       if (e.target.closest('button')) return;
+      if (maximized && !collapsed) return;
       pending = true;
       dragging = false;
       suppressClick = false;
@@ -123,14 +220,19 @@ export function mountTerminal({ logger, store, controls }) {
         root.style.right = 'auto';
         root.style.bottom = 'auto';
       }
-      root.style.left = ox + dx + 'px';
-      root.style.top = oy + dy + 'px';
+      const r = root.getBoundingClientRect();
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      // 拖拽实时夹紧：至少露出 EDGE_MARGIN，避免拖出屏幕
+      const left = clamp(ox + dx, EDGE_MARGIN - r.width + 48, vw - EDGE_MARGIN - 24);
+      const top = clamp(oy + dy, EDGE_MARGIN, vh - EDGE_MARGIN - 32);
+      root.style.left = `${left}px`;
+      root.style.top = `${top}px`;
     });
 
     window.addEventListener('mouseup', () => {
       pending = false;
       dragging = false;
-      // click 事件在 mouseup 后触发，用 suppressClick 抑制误展开
       setTimeout(() => {
         suppressClick = false;
       }, 0);
@@ -155,6 +257,14 @@ export function mountTerminal({ logger, store, controls }) {
     if (act === 'pause') controls?.onPause?.();
     if (act === 'stop') controls?.onStop?.();
     if (act === 'config') drawer.toggle();
+    if (act === 'maximize') {
+      setMaximized(true);
+      return;
+    }
+    if (act === 'restore') {
+      setMaximized(false);
+      return;
+    }
     if (act === 'collapse') {
       drawer.close();
       setCollapsed(true);
@@ -187,14 +297,20 @@ export function mountTerminal({ logger, store, controls }) {
     }
   });
 
+  const onResize = () => clampToViewport();
+  window.addEventListener('resize', onResize);
+
   setCollapsed(false);
   setStatus('空闲');
+  // 初始 right/bottom 定位，视口变化时再夹紧
+  requestAnimationFrame(() => clampToViewport());
 
   return {
     root,
     setStatus,
     unmount: () => {
       un();
+      window.removeEventListener('resize', onResize);
       root.remove();
       style.remove();
     }
