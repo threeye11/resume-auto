@@ -1,0 +1,74 @@
+#ra-root {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 999999;
+  width: 320px;
+  background: #0d1117;
+  color: #e6edf3;
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.45);
+  overflow: hidden;
+}
+#ra-root * { box-sizing: border-box; }
+.ra-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid #30363d;
+  cursor: move;
+  user-select: none;
+}
+.ra-title { font-weight: 600; color: #3fb950; }
+.ra-status { color: #8b949e; }
+.ra-body { max-height: 220px; overflow: auto; padding: 8px 10px; line-height: 1.55; }
+.ra-line { white-space: pre-wrap; word-break: break-all; }
+.ra-ts { color: #8b949e; margin-right: 6px; }
+.ra-ok { color: #3fb950; }
+.ra-warn { color: #d29922; }
+.ra-err { color: #f85149; }
+.ra-actions {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid #30363d;
+  flex-wrap: wrap;
+}
+.ra-btn {
+  background: #21262d;
+  color: #e6edf3;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font: inherit;
+}
+.ra-btn:hover { border-color: #8b949e; }
+.ra-btn.primary { background: #238636; border-color: #238636; }
+.ra-drawer { display: none; padding: 10px; border-top: 1px solid #30363d; }
+.ra-drawer.open { display: block; }
+.ra-drawer label { display: block; margin: 6px 0 2px; color: #8b949e; }
+.ra-drawer input, .ra-drawer textarea {
+  width: 100%;
+  background: #0d1117;
+  color: #e6edf3;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font: inherit;
+}
+.ra-drawer textarea { min-height: 64px; resize: vertical; }
+.ra-collapsed {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 24px !important;
+  cursor: pointer;
+}
+.ra-collapsed .ra-body,
+.ra-collapsed .ra-actions,
+.ra-collapsed .ra-drawer,
+.ra-collapsed .ra-status { display: none !important; }
