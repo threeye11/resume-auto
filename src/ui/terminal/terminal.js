@@ -81,7 +81,9 @@ export function mountTerminal({ logger, store, controls }) {
     collapsed = next;
     root.classList.toggle('ra-collapsed', next);
     ballEl.hidden = !next;
-    header.hidden = next;
+    if (next) ballEl.removeAttribute('hidden');
+    else ballEl.setAttribute('hidden', '');
+    header.style.display = next ? 'none' : '';
     titleText.textContent = next ? 'RA' : 'resume-auto';
     applyBallBadge(statusText);
   }
@@ -185,6 +187,7 @@ export function mountTerminal({ logger, store, controls }) {
     }
   });
 
+  setCollapsed(false);
   setStatus('空闲');
 
   return {
