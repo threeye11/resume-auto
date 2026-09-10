@@ -1,12 +1,10 @@
-import { DEFAULT_CONFIG } from '../../core/store.js';
-
 const FIELDS = [
   ['jobInclude', '职位名包含', 'text'],
   ['companyInclude', '公司名包含', 'text'],
   ['companyExclude', '公司名排除', 'text'],
-  ['descExclude', '描述排除词', 'text'],
-  ['salaryMin', '薪资下限(K)', 'number'],
-  ['salaryMax', '薪资上限(K)', 'number'],
+  ['descExclude', '描述排除词（预留）', 'text'],
+  ['salaryMin', '薪资下限 (K)', 'number'],
+  ['salaryMax', '薪资上限 (K)', 'number'],
   ['dailyLimit', '日配额', 'number'],
   ['greeting', '招呼语', 'textarea'],
   ['skipNoSalary', '无薪资跳过', 'checkbox']
@@ -19,6 +17,21 @@ export function mountConfigDrawer(root, { store, onSave }) {
   const inputs = {};
 
   for (const [key, label, type] of FIELDS) {
+    if (type === 'checkbox') {
+      const wrap = document.createElement('label');
+      wrap.className = 'ra-check';
+      const el = document.createElement('input');
+      el.type = 'checkbox';
+      el.checked = Boolean(cfg[key]);
+      const span = document.createElement('span');
+      span.textContent = label;
+      wrap.appendChild(el);
+      wrap.appendChild(span);
+      drawer.appendChild(wrap);
+      inputs[key] = { el, type };
+      continue;
+    }
+
     const lab = document.createElement('label');
     lab.textContent = label;
     drawer.appendChild(lab);
@@ -26,23 +39,23 @@ export function mountConfigDrawer(root, { store, onSave }) {
     if (type === 'textarea') {
       el = document.createElement('textarea');
       el.value = cfg[key] ?? '';
-    } else if (type === 'checkbox') {
-      el = document.createElement('input');
-      el.type = 'checkbox';
-      el.checked = Boolean(cfg[key]);
     } else {
       el = document.createElement('input');
       el.type = type === 'number' ? 'number' : 'text';
       el.value = cfg[key] ?? '';
+      if (type === 'number') {
+        el.min = '0';
+        el.step = '1';
+      }
     }
     inputs[key] = { el, type };
     drawer.appendChild(el);
   }
 
   const saveBtn = document.createElement('button');
-  saveBtn.className = 'ra-btn primary';
+  saveBtn.type = 'button';
+  saveBtn.className = 'ra-btn primary ra-save';
   saveBtn.textContent = '保存配置';
-  saveBtn.style.marginTop = '10px';
   saveBtn.addEventListener('click', () => {
     const partial = {};
     for (const [key, , type] of FIELDS) {
@@ -52,6 +65,10 @@ export function mountConfigDrawer(root, { store, onSave }) {
       else partial[key] = el.value;
     }
     store.updateConfig(partial);
+    saveBtn.textContent = '已保存';
+    setTimeout(() => {
+      saveBtn.textContent = '保存配置';
+    }, 1200);
     onSave?.(partial);
   });
   drawer.appendChild(saveBtn);

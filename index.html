@@ -2,10 +2,56 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>resume-auto 终端预览</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #010409;
+      color: #e6edf3;
+      font-family: ui-sans-serif, system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    }
+    .wrap {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 48px 24px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 650;
+      margin: 0 0 8px;
+      letter-spacing: 0.01em;
+    }
+    p {
+      color: #8b949e;
+      line-height: 1.6;
+      margin: 0 0 12px;
+    }
+    code {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 12px;
+    }
+    ul {
+      color: #8b949e;
+      line-height: 1.8;
+      padding-left: 1.2em;
+    }
+  </style>
 </head>
 <body>
-  <h1 style="font-family:sans-serif;padding:20px">resume-auto · 浮层终端预览（mock）</h1>
+  <div class="wrap">
+    <h1>resume-auto · 浮层终端预览</h1>
+    <p>右下角为 mock 终端，可试：折叠/展开、配置抽屉、导出、开始（打演示日志）。</p>
+    <ul>
+      <li>点「— 折叠」收成绿色悬浮球，再点球任意位置应能展开</li>
+      <li>点「⚙ 配置」打开抽屉，保存后按钮会闪一下「已保存」</li>
+      <li>生产入口仍是 <code>src/index.user.js</code> → <code>npm run build</code></li>
+    </ul>
+  </div>
   <script type="module" src="/src/ui/preview.js"></script>
 </body>
 </html>
