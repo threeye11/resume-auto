@@ -47,6 +47,59 @@ function findByText(root, re) {
   return null;
 }
 
+/** 关掉可能残留的弹层（投递成功、微信扫码与我聊聊等） */
+export async function closeOverlays({ logger, times = 6 } = {}) {
+  for (let i = 0; i < times; i++) {
+    // 1) 明确关闭类按钮
+    const closers = document.querySelectorAll(
+      '[class*="dialog"] [class*="close"], [class*="modal"] [class*="close"], ' +
+        '[class*="dialog"] [class*="icon-close"], [class*="modal"] [class*="icon-close"], ' +
+        '[class*="mask"] [class*="close"], .close-btn, [aria-label="关闭"], [aria-label="close"]'
+    );
+    let clicked = false;
+    for (const el of closers) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4) continue;
+      clickLike(el);
+      clicked = true;
+      await sleep(200);
+    }
+
+    // 2) 按钮文案「关闭/知道了」但不要点去聊聊/投递
+    const stay = findByText(
+      document,
+      /^关闭$|^知道了$|^确定$|^暂不$|^继续浏览$|^完成$|^留在此页$/
+    );
+    if (stay && !/去聊聊|投递|收藏/.test(btnText(stay))) {
+      clickLike(stay);
+      clicked = true;
+      await sleep(200);
+    }
+
+    // 3) ESC
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true })
+    );
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true })
+    );
+
+    if (!clicked) {
+      // 没有可见弹层则提前结束
+      const still = document.querySelector(
+        '[class*="dialog"], [class*="modal"], [class*="mask"]'
+      );
+      if (!still) return true;
+      const r = still.getBoundingClientRect();
+      const style = window.getComputedStyle(still);
+      if (style.display === 'none' || style.visibility === 'hidden' || r.width < 40) return true;
+    }
+    await sleep(150);
+  }
+  logger?.emit('apply', { status: 'overlays-cleared' });
+  return true;
+}
+
 /** 投递后确认弹窗：点关闭/确定 */
 async function dismissDialog({ logger } = {}) {
   for (let i = 0; i < 5; i++) {
@@ -109,6 +162,7 @@ export async function applyJob(job, { logger } = {}) {
   clickLike(btn);
   await sleep(450);
   await dismissDialog({ logger });
+  await closeOverlays({ logger, times: 4 });
 
   if (isAppliedButton(findApplyButton(root)) || isAppliedButton(findPageApplyButton())) {
     return 'ok';
