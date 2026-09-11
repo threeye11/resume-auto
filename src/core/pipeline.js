@@ -211,54 +211,69 @@ export function createPipeline({ adapter, store, logger }) {
       return;
     }
     if (running) return;
-    running = true;
 
+    // 调度器若卡在 stopped/idle 残留，先复位，避免第二次「开始」无响应
+    if (scheduler.state() === 'stopped') {
+      scheduler.reset?.();
+    }
+
+    running = true;
     const cfg = store.getConfig();
     const maxPages = Math.max(1, Number(cfg.maxPages) || 1);
     const autoPage = Boolean(cfg.autoPage);
     const acc = { ok: 0, skip: 0, fail: 0 };
+    let finishedNote = '';
 
     try {
       let page = 1;
       for (;;) {
         const { canPage, quotaStopped } = await runOnePage(page, cfg, acc);
-        if (quotaStopped) break;
+        if (quotaStopped) {
+          finishedNote = '配额用尽';
+          break;
+        }
         if (!autoPage || !canPage) break;
         if (page >= maxPages) {
-          logger.emit('done', {
-            ok: acc.ok,
-            skip: acc.skip,
-            fail: acc.fail,
-            note: `已到设定最大页数 ${maxPages}`
-          });
-          return;
+          finishedNote = `已到设定最大页数 ${maxPages}`;
+          break;
         }
         if (typeof adapter.nextPage !== 'function') break;
 
         logger.emit('scan', { note: `尝试翻到第 ${page + 1} 页…` });
         const flipped = await adapter.nextPage();
         if (!flipped) {
-          logger.emit('done', {
-            ok: acc.ok,
-            skip: acc.skip,
-            fail: acc.fail,
-            note: '没有下一页或翻页失败'
-          });
-          return;
+          finishedNote = '没有下一页或翻页失败';
+          break;
         }
         page += 1;
         await sleep(800 + Math.floor(Math.random() * 600));
-        if (scheduler.state() === 'stopped') break;
+        if (scheduler.state() === 'stopped') {
+          finishedNote = '已停止';
+          break;
+        }
       }
 
-      if (scheduler.state() !== 'paused') {
-        running = false;
-        logger.emit('done', { ok: acc.ok, skip: acc.skip, fail: acc.fail });
+      if (scheduler.state() === 'paused') {
+        // 保持 running=true，便于点「开始」resume
+        return;
       }
+
+      running = false;
+      logger.emit('done', {
+        ok: acc.ok,
+        skip: acc.skip,
+        fail: acc.fail,
+        ...(finishedNote ? { note: finishedNote } : {})
+      });
     } catch (e) {
       running = false;
       logger.emit('error', { where: 'pipeline', msg: e.message || String(e) });
       logger.emit('done', { ok: acc.ok, skip: acc.skip, fail: acc.fail });
+    } finally {
+      // 非暂停态务必解锁，否则下次「开始」会被 running 挡住
+      if (scheduler.state() !== 'paused' && scheduler.state() !== 'running') {
+        running = false;
+      }
     }
   }
 
@@ -266,7 +281,10 @@ export function createPipeline({ adapter, store, logger }) {
     start,
     pause: () => scheduler.pause(),
     resume: () => scheduler.resume(),
-    stop: () => scheduler.stop(),
+    stop: () => {
+      scheduler.stop();
+      running = false;
+    },
     isRunning: () => running
   };
 }
