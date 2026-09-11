@@ -104,38 +104,84 @@ export async function applyJob(job, { logger } = {}) {
   return 'ok';
 }
 
+function findVisibleChatInput() {
+  const sels = [
+    'textarea.input-area',
+    'textarea[class*="chat"]',
+    '.chat-input textarea',
+    '.chat-conversation textarea',
+    '.msg-input textarea',
+    'textarea',
+    '[contenteditable="true"]'
+  ];
+  for (const sel of sels) {
+    for (const el of document.querySelectorAll(sel)) {
+      const r = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      if (r.width < 40 || r.height < 16) continue;
+      if (style.visibility === 'hidden' || style.display === 'none') continue;
+      return el;
+    }
+  }
+  return null;
+}
+
+function findContinueChatButton() {
+  const nodes = document.querySelectorAll('a, button, .btn, [role="button"]');
+  for (const b of nodes) {
+    const t = (b.textContent || '').replace(/\s/g, '');
+    if (t === '继续沟通') return b;
+  }
+  return null;
+}
+
 export async function sendGreeting(job, greeting, { logger } = {}) {
   if (!greeting || !String(greeting).trim()) return 'fail';
   const text = String(greeting).replace(/<br\s*\/?>/gi, '\n');
 
-  const input =
-    document.querySelector(
-      'textarea.input-area, textarea[class*="chat"], .chat-input textarea, .chat-conversation textarea'
-    ) ||
-    Array.from(document.querySelectorAll('textarea, [contenteditable="true"]')).find((el) => {
-      const r = el.getBoundingClientRect();
-      return r.width > 80 && r.height > 20;
-    });
+  // 列表页点完「立即沟通」后，聊天框可能延迟出现；先等再找
+  let input = findVisibleChatInput();
+  if (!input) {
+    const cont = findContinueChatButton();
+    if (cont) {
+      clickLike(cont);
+      await sleep(600);
+      input = findVisibleChatInput();
+    }
+  }
+  if (!input) {
+    await sleep(500);
+    input = findVisibleChatInput();
+  }
 
   if (!input) {
-    logger?.emit('error', { where: 'greet', jobId: job.id, msg: 'chat input not found' });
+    logger?.emit('error', {
+      where: 'greet',
+      jobId: job.id,
+      msg: 'chat input not found（列表页投递后未弹出会话；可清空招呼语或稍后在消息页手动发）'
+    });
     return 'fail';
   }
 
   input.focus();
-  if ('value' in input && input.tagName === 'TEXTAREA') {
-    input.value = text;
+  if (input.tagName === 'TEXTAREA' || input.tagName === 'INPUT') {
+    const proto = Object.getOwnPropertyDescriptor(
+      input.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+      'value'
+    );
+    proto?.set?.call(input, text);
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
   } else {
     input.textContent = text;
-    input.dispatchEvent(new InputEvent('input', { bubbles: true, data: text }));
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, data: text, inputType: 'insertText' }));
   }
-  await sleep(200);
+  await sleep(250);
 
   const sendBtn =
-    Array.from(document.querySelectorAll('button, .btn')).find((b) => /^发送$/.test(btnText(b))) ||
-    document.querySelector('.btn-send, .chat-input button');
+    Array.from(document.querySelectorAll('button, .btn')).find((b) =>
+      /^发送$/.test((b.textContent || '').replace(/\s/g, ''))
+    ) || document.querySelector('.btn-send, .chat-input button');
   if (!sendBtn) {
     logger?.emit('error', { where: 'greet', jobId: job.id, msg: 'send button not found' });
     return 'fail';

@@ -71,6 +71,8 @@ export function createPipeline({ adapter, store, logger }) {
         dedupe.mark(job.id);
         logger.emit('apply', { index: index + 1, title: job.title, company: job.company, status: 'ok' });
         if (cfg.greeting && String(cfg.greeting).trim()) {
+          // 等会话/弹窗出现再发招呼
+          await new Promise((r) => setTimeout(r, 800));
           const g = await adapter.sendGreeting(job, cfg.greeting);
           logger.emit('greet', { status: g, title: job.title });
         }
