@@ -69,16 +69,16 @@ export function findApplyButton(root) {
 }
 
 export function findDetailApplyButton() {
+  // 1) 详情面板容器
   const panels = Array.from(document.querySelectorAll(SEL.detailPanel));
-  const scopes = panels.length ? panels : [document];
-  for (const scope of scopes) {
+  for (const scope of panels.length ? panels : []) {
     const btn = findApplyButton(scope);
     if (btn) return btn;
   }
-  // 兜底：整页文案匹配
-  const all = document.querySelectorAll('button, a.btn, .btn, [role="button"]');
+  // 2) 整页按文案找「立即沟通」（含 a / button / .btn）
+  const all = document.querySelectorAll('a, button, .btn, [role="button"], span[class*="btn"]');
   for (const b of all) {
-    const t = (b.textContent || '').trim();
+    const t = (b.textContent || '').replace(/\s/g, '');
     if (SEL.applyText.test(t)) return b;
   }
   return null;

@@ -6,7 +6,19 @@ function sleep(ms) {
 
 function clickLike(el) {
   if (!el) return false;
-  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+  // 优先原生 click（React/Vue 更容易吃到）；失败再补完整指针序列
+  try {
+    el.click();
+    return true;
+  } catch {
+    /* fallthrough */
+  }
+  const opts = { bubbles: true, cancelable: true, view: window, buttons: 1 };
+  el.dispatchEvent(new PointerEvent('pointerdown', opts));
+  el.dispatchEvent(new MouseEvent('mousedown', opts));
+  el.dispatchEvent(new PointerEvent('pointerup', opts));
+  el.dispatchEvent(new MouseEvent('mouseup', opts));
+  el.dispatchEvent(new MouseEvent('click', opts));
   return true;
 }
 
@@ -44,9 +56,14 @@ export async function applyJob(job, { logger } = {}) {
     // 点击卡片让右侧详情刷新
     const cardLink = root.querySelector(SEL.cardLink) || root;
     clickLike(cardLink);
-    await sleep(500);
+    await sleep(600);
     btn = findDetailApplyButton();
     viaDetail = true;
+    if (!btn) {
+      // 再等一轮，详情区可能异步渲染
+      await sleep(400);
+      btn = findDetailApplyButton();
+    }
   }
 
   if (!btn) {
