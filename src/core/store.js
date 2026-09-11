@@ -1,9 +1,3 @@
-const KEYS = {
-  config: 'ra.config',
-  applied: 'ra.applied',
-  quota: 'ra.quota'
-};
-
 export const DEFAULT_CONFIG = {
   jobInclude: '',
   companyInclude: '',
@@ -25,8 +19,17 @@ function todayStr(d = new Date()) {
   return `${y}-${m}-${day}`;
 }
 
-/** backend: { get(key, def), set(key, val), del(key) } */
-export function createStore(backend, { today = () => todayStr() } = {}) {
+/**
+ * backend: { get(key, def), set(key, val), del(key) }
+ * ns: 平台命名空间（如 boss / w51job）——已投列表、日配额、配置按站隔离
+ */
+export function createStore(backend, { today = () => todayStr(), ns = 'default' } = {}) {
+  const KEYS = {
+    config: `ra.${ns}.config`,
+    applied: `ra.${ns}.applied`,
+    quota: `ra.${ns}.quota`
+  };
+
   function getConfig() {
     const raw = backend.get(KEYS.config, null);
     return { ...DEFAULT_CONFIG, ...(raw || {}) };

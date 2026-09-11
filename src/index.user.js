@@ -14,10 +14,11 @@ function pickAdapter(logger) {
 
 function boot() {
   const logger = createLogger();
-  const store = createStore(gmBackend());
   const adapter = pickAdapter(logger);
-
   if (!adapter || !adapter.matchHost()) return;
+
+  // 配置/已投/日配额按站点隔离（boss 与 w51job 互不影响）
+  const store = createStore(gmBackend(), { ns: adapter.id() });
 
   const pipeline = createPipeline({ adapter, store, logger });
   const ui = mountTerminal({

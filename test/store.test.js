@@ -49,3 +49,18 @@ test('resetQuotaForDate 显式清零', () => {
   assert.equal(s.getQuota().count, 0);
   assert.equal(s.getQuota().date, '2099-01-01');
 });
+
+test('不同 ns 的配额与已投互不影响', () => {
+  const backend = memBackend();
+  const boss = createStore(backend, { ns: 'boss', today: () => '2099-01-01' });
+  const w51 = createStore(backend, { ns: 'w51job', today: () => '2099-01-01' });
+
+  boss.addQuota(5);
+  boss.markApplied('j1');
+  boss.updateConfig({ dailyLimit: 10 });
+
+  assert.equal(w51.getQuota().count, 0);
+  assert.equal(w51.hasApplied('j1'), false);
+  assert.equal(w51.getConfig().dailyLimit, 100);
+  assert.equal(boss.getQuota().count, 5);
+});
