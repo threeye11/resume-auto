@@ -24,7 +24,9 @@ export const SEL = {
   /** 只认这些文案为投递按钮 */
   applyText: /^(投递|立即投递|申请职位)$/,
   appliedText: /^(已投递|继续投递|投递成功)$/,
-  rejectText: /^(收藏|取消收藏|感兴趣|举报|分享|去聊聘|聊一聊|查职位)$/
+  /** 投递后需要再点的「去聊聊」 */
+  chatText: /^(去聊聊|去聊聘|聊一聊|立即沟通)$/,
+  rejectText: /^(收藏|取消收藏|感兴趣|举报|分享|查职位)$/
 };
 
 export function textOf(el, sel) {
@@ -58,6 +60,12 @@ export function isAppliedButton(el) {
   return SEL.appliedText.test(t);
 }
 
+export function isChatButton(el) {
+  if (!el) return false;
+  const t = normalizeBtnText(el);
+  return SEL.chatText.test(t);
+}
+
 function collectCandidates(root) {
   const list = root.querySelectorAll?.(
     'a, button, .btn, [role="button"], span[class*="btn"], div[class*="btn"]'
@@ -70,6 +78,29 @@ export function findApplyButton(root) {
   if (!root) return null;
   for (const b of collectCandidates(root)) {
     if (isApplyButton(b)) return b;
+  }
+  return null;
+}
+
+/** 找「去聊聊」 */
+export function findChatButton(root) {
+  if (!root) return null;
+  for (const b of collectCandidates(root)) {
+    if (isChatButton(b)) return b;
+  }
+  return null;
+}
+
+export function findPageChatButton() {
+  const panels = document.querySelectorAll(
+    '[class*="job-detail"], [class*="jobdetail"], [class*="detail-box"], .rtbox'
+  );
+  for (const p of panels) {
+    const btn = findChatButton(p);
+    if (btn) return btn;
+  }
+  for (const b of collectCandidates(document)) {
+    if (isChatButton(b)) return b;
   }
   return null;
 }
