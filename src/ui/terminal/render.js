@@ -12,7 +12,9 @@ function describe(e) {
     case 'scan':
       return p.note || `扫描 ${p.count ?? 0} 条`;
     case 'filter':
-      return `列表 ${p.total ?? 0} · 筛过 ${p.pass ?? 0} · 已投跳过 ${p.skippedApplied ?? 0} · 待投 ${p.pending ?? 0}`;
+      return p.page
+        ? `第${p.page}页 · 列表 ${p.total} · 待投 ${p.pending} · 已投跳过 ${p.skippedApplied}`
+        : `列表 ${p.total ?? 0} · 筛过 ${p.pass ?? 0} · 已投跳过 ${p.skippedApplied ?? 0} · 待投 ${p.pending ?? 0}`;
     case 'dedupe':
       return `#${p.index ?? '-'} ${p.title || p.id || ''} @${p.company || ''} 已投跳过`;
     case 'quota':

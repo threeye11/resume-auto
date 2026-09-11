@@ -9,7 +9,9 @@ export const DEFAULT_CONFIG = {
   greeting: '',
   delayMinMs: 800,
   delayMaxMs: 2000,
-  skipNoSalary: false
+  skipNoSalary: false,
+  autoPage: false,
+  maxPages: 3
 };
 
 function todayStr(d = new Date()) {

@@ -33,11 +33,30 @@ export function createBossAdapter({ logger } = {}) {
     return SEL.appliedText.test(txt);
   }
 
+  /** BOSS 多为无限滚动：滚到底加载更多；列表变长则 true */
+  async function nextPage() {
+    const before = extractList().length;
+    const scroller =
+      document.querySelector('.job-list-box, .job-list-wrapper, [class*="job-list"]') ||
+      document.scrollingElement ||
+      document.documentElement;
+    scroller.scrollTo?.({ top: scroller.scrollHeight, behavior: 'instant' });
+    scroller.scrollTop = scroller.scrollHeight;
+    window.scrollTo(0, document.body.scrollHeight);
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 300));
+      const n = extractList().length;
+      if (n > before) return true;
+    }
+    return extractList().length > before;
+  }
+
   return {
     id: () => 'boss',
     matchHost,
     extractList,
     isApplied,
+    nextPage,
     apply: (job) => applyJob(job, { logger }),
     sendGreeting: (job, greeting) => sendGreeting(job, greeting, { logger })
   };

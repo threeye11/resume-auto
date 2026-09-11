@@ -3,6 +3,10 @@ import { createDedupe } from './dedupe.js';
 import { checkQuota, consumeQuota } from './quota.js';
 import { createScheduler } from './scheduler.js';
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 export function createPipeline({ adapter, store, logger }) {
   const scheduler = createScheduler({
     delayMs: () => {
@@ -22,10 +26,6 @@ export function createPipeline({ adapter, store, logger }) {
 
   let running = false;
 
-  /**
-   * 指针式扫描：从上到下走一遍列表。
-   * 已投过 → 跳过并继续下一个；未投过 → 进入待投队列。
-   */
   function buildQueue(jobs, cfg, dedupe) {
     const pending = [];
     let filtered = 0;
@@ -50,7 +50,7 @@ export function createPipeline({ adapter, store, logger }) {
           index: i + 1,
           title: job.title,
           company: job.company,
-          status: '已投跳过→找下一个'
+          status: '已投跳过'
         });
         continue;
       }
@@ -58,6 +58,151 @@ export function createPipeline({ adapter, store, logger }) {
     }
 
     return { pending, filtered, skippedApplied };
+  }
+
+  function makeDedupe(jobs) {
+    return createDedupe(store, {
+      isApplied: (id) => {
+        const j = jobs.find((x) => x.id === id);
+        return j ? adapter.isApplied(j) : false;
+      }
+    });
+  }
+
+  /** 处理当前列表页；返回统计与是否可翻页 */
+  async function runOnePage(pageNum, cfg, acc) {
+    const jobs = adapter.extractList();
+    const dedupe = makeDedupe(jobs);
+    const { pending, filtered, skippedApplied } = buildQueue(jobs, cfg, dedupe);
+
+    logger.emit('filter', {
+      page: pageNum,
+      pass: pending.length + skippedApplied,
+      total: jobs.length,
+      pending: pending.length,
+      skippedApplied,
+      filtered
+    });
+
+    const q0 = checkQuota(store, cfg.dailyLimit);
+    if (pending.length === 0) {
+      logger.emit('scan', {
+        page: pageNum,
+        count: jobs.length,
+        pending: 0,
+        note: `第 ${pageNum} 页无待投（已投跳过 ${skippedApplied}）`
+      });
+      acc.skip += skippedApplied;
+      return { canPage: true, quotaStopped: false };
+    }
+
+    if (!q0.canApply) {
+      logger.emit('quota', {
+        stopped: true,
+        count: q0.count,
+        limit: q0.limit,
+        pending: pending.length,
+        note: `今日配额已用尽（${q0.count}/${q0.limit}），第 ${pageNum} 页仍有 ${pending.length} 条未投`
+      });
+      acc.skip += skippedApplied;
+      return { canPage: false, quotaStopped: true };
+    }
+
+    logger.emit('scan', {
+      page: pageNum,
+      count: jobs.length,
+      pending: pending.length,
+      note: `第 ${pageNum} 页 · 待投 ${pending.length} 条（已跳过 ${skippedApplied} 条）`
+    });
+
+    let quotaStopped = false;
+    const tasks = pending.map((job, index) => async () => {
+      if (quotaStopped) return 'quota-stop';
+
+      const q = checkQuota(store, cfg.dailyLimit);
+      if (!q.canApply) {
+        quotaStopped = true;
+        logger.emit('quota', {
+          stopped: true,
+          count: q.count,
+          limit: q.limit,
+          note: `配额 ${q.count}/${q.limit} 已满，停止后续`
+        });
+        scheduler.stop();
+        return 'quota-stop';
+      }
+
+      if (dedupe.shouldSkip(job.id)) {
+        acc.skip += 1;
+        logger.emit('apply', { index: index + 1, title: job.title, status: 'skip' });
+        return 'skip';
+      }
+
+      const r = await adapter.apply(job);
+      if (r === 'ok') {
+        acc.ok += 1;
+        consumeQuota(store, 1);
+        dedupe.mark(job.id);
+        logger.emit('apply', {
+          index: index + 1,
+          title: job.title,
+          company: job.company,
+          status: 'ok'
+        });
+        if (cfg.greeting && String(cfg.greeting).trim()) {
+          await sleep(600);
+          const g = await adapter.sendGreeting(job, cfg.greeting);
+          if (g === 'ok') {
+            logger.emit('greet', { status: 'ok', title: job.title });
+          } else {
+            logger.emit('greet', {
+              status: 'default',
+              title: job.title,
+              note: '未发脚本招呼语（列表无输入框或平台不支持）'
+            });
+          }
+        }
+      } else if (r === 'skip') {
+        acc.skip += 1;
+        dedupe.mark(job.id);
+        logger.emit('apply', {
+          index: index + 1,
+          title: job.title,
+          company: job.company,
+          status: 'skip'
+        });
+      } else {
+        acc.fail += 1;
+        logger.emit('apply', {
+          index: index + 1,
+          title: job.title,
+          company: job.company,
+          status: 'fail'
+        });
+      }
+
+      logger.emit('progress', {
+        done: acc.ok + acc.skip + acc.fail,
+        total: pending.length,
+        page: pageNum,
+        ok: acc.ok,
+        fail: acc.fail
+      });
+      const qq = store.getQuota();
+      logger.emit('quota', { count: qq.count, limit: cfg.dailyLimit });
+    });
+
+    await scheduler.run(tasks);
+    acc.skip += skippedApplied;
+
+    if (quotaStopped || scheduler.state() === 'stopped') {
+      return { canPage: false, quotaStopped: true };
+    }
+    // 暂停中：不翻页，等 resume 后由用户再点开始会 resume 当前页剩余；本页 run 已结束
+    if (scheduler.state() === 'paused') {
+      return { canPage: false, quotaStopped: false };
+    }
+    return { canPage: true, quotaStopped: false };
   }
 
   async function start() {
@@ -69,149 +214,51 @@ export function createPipeline({ adapter, store, logger }) {
     running = true;
 
     const cfg = store.getConfig();
-    const jobs = adapter.extractList();
-
-    const dedupe = createDedupe(store, {
-      isApplied: (id) => {
-        const j = jobs.find((x) => x.id === id);
-        return j ? adapter.isApplied(j) : false;
-      }
-    });
-
-    const { pending, filtered, skippedApplied } = buildQueue(jobs, cfg, dedupe);
-
-    logger.emit('filter', {
-      pass: pending.length + skippedApplied,
-      total: jobs.length,
-      pending: pending.length,
-      skippedApplied,
-      filtered
-    });
-
-    // 开跑前先看配额：已满则不再点任何岗位，但已把「还有哪些未投」扫完
-    const q0 = checkQuota(store, cfg.dailyLimit);
-    if (pending.length === 0) {
-      running = false;
-      logger.emit('done', {
-        ok: 0,
-        skip: skippedApplied,
-        fail: 0,
-        note: skippedApplied > 0 ? '列表内均已投过或被排除' : '无可投岗位'
-      });
-      return;
-    }
-    if (!q0.canApply) {
-      running = false;
-      logger.emit('quota', {
-        stopped: true,
-        count: q0.count,
-        limit: q0.limit,
-        pending: pending.length,
-        note: `今日配额已用尽（${q0.count}/${q0.limit}），仍有 ${pending.length} 条未投。可在「配置」里重置今日配额后再开始`
-      });
-      logger.emit('done', { ok: 0, skip: skippedApplied, fail: 0, note: '配额用尽未投递' });
-      return;
-    }
-
-    logger.emit('scan', {
-      count: jobs.length,
-      pending: pending.length,
-      skippedApplied,
-      note: `待投 ${pending.length} 条（已跳过 ${skippedApplied} 条已投）`
-    });
-
-    let ok = 0;
-    let skip = 0;
-    let fail = 0;
-    let quotaStopped = false;
-
-    // 只对「未投过」的岗位建任务；过程中已投/配额仍会再判一次
-    const tasks = pending.map((job, index) => async () => {
-      if (quotaStopped) return 'quota-stop';
-
-      const q = checkQuota(store, cfg.dailyLimit);
-      if (!q.canApply) {
-        quotaStopped = true;
-        logger.emit('quota', {
-          stopped: true,
-          count: q.count,
-          limit: q.limit,
-          note: `配额 ${q.count}/${q.limit} 已满，停止后续 ${pending.length - index} 条`
-        });
-        scheduler.stop();
-        return 'quota-stop';
-      }
-
-      // 指针前进时再验一次（可能其它窗口刚投过）
-      if (dedupe.shouldSkip(job.id)) {
-        skip += 1;
-        logger.emit('apply', { index: index + 1, title: job.title, status: 'skip' });
-        return 'skip';
-      }
-
-      const r = await adapter.apply(job);
-      if (r === 'ok') {
-        ok += 1;
-        consumeQuota(store, 1);
-        dedupe.mark(job.id);
-        logger.emit('apply', {
-          index: index + 1,
-          title: job.title,
-          company: job.company,
-          status: 'ok'
-        });
-        if (cfg.greeting && String(cfg.greeting).trim()) {
-          // BOSS 在点「立即沟通」时已用「消息-设置招呼语」发过默认文案；
-          // 列表页留在此页后通常没有输入框。仅在能打开会话时补发自定义语。
-          await new Promise((r2) => setTimeout(r2, 600));
-          const g = await adapter.sendGreeting(job, cfg.greeting);
-          if (g === 'ok') {
-            logger.emit('greet', { status: 'ok', title: job.title });
-          } else {
-            logger.emit('greet', {
-              status: 'default',
-              title: job.title,
-              note: '已用 BOSS 默认招呼语；列表页无输入框，未再发脚本配置文案'
-            });
-          }
-        }
-      } else if (r === 'skip') {
-        skip += 1;
-        dedupe.mark(job.id);
-        logger.emit('apply', {
-          index: index + 1,
-          title: job.title,
-          company: job.company,
-          status: 'skip'
-        });
-      } else {
-        fail += 1;
-        logger.emit('apply', {
-          index: index + 1,
-          title: job.title,
-          company: job.company,
-          status: 'fail'
-        });
-      }
-
-      logger.emit('progress', {
-        done: ok + skip + fail,
-        total: pending.length,
-        ok,
-        fail,
-        skippedApplied
-      });
-      const qq = store.getQuota();
-      logger.emit('quota', { count: qq.count, limit: cfg.dailyLimit });
-    });
+    const maxPages = Math.max(1, Number(cfg.maxPages) || 1);
+    const autoPage = Boolean(cfg.autoPage);
+    const acc = { ok: 0, skip: 0, fail: 0 };
 
     try {
-      await scheduler.run(tasks);
-    } finally {
+      let page = 1;
+      for (;;) {
+        const { canPage, quotaStopped } = await runOnePage(page, cfg, acc);
+        if (quotaStopped) break;
+        if (!autoPage || !canPage) break;
+        if (page >= maxPages) {
+          logger.emit('done', {
+            ok: acc.ok,
+            skip: acc.skip,
+            fail: acc.fail,
+            note: `已到设定最大页数 ${maxPages}`
+          });
+          return;
+        }
+        if (typeof adapter.nextPage !== 'function') break;
+
+        logger.emit('scan', { note: `尝试翻到第 ${page + 1} 页…` });
+        const flipped = await adapter.nextPage();
+        if (!flipped) {
+          logger.emit('done', {
+            ok: acc.ok,
+            skip: acc.skip,
+            fail: acc.fail,
+            note: '没有下一页或翻页失败'
+          });
+          return;
+        }
+        page += 1;
+        await sleep(800 + Math.floor(Math.random() * 600));
+        if (scheduler.state() === 'stopped') break;
+      }
+
       if (scheduler.state() !== 'paused') {
         running = false;
-        logger.emit('done', { ok, skip: skip + skippedApplied, fail, pending: pending.length });
+        logger.emit('done', { ok: acc.ok, skip: acc.skip, fail: acc.fail });
       }
+    } catch (e) {
+      running = false;
+      logger.emit('error', { where: 'pipeline', msg: e.message || String(e) });
+      logger.emit('done', { ok: acc.ok, skip: acc.skip, fail: acc.fail });
     }
   }
 

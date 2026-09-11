@@ -7,7 +7,9 @@ const FIELDS = [
   ['salaryMax', '薪资上限 (K)', 'number'],
   ['dailyLimit', '日配额', 'number'],
   ['greeting', '招呼语', 'textarea'],
-  ['skipNoSalary', '无薪资跳过', 'checkbox']
+  ['skipNoSalary', '无薪资跳过', 'checkbox'],
+  ['autoPage', '自动翻页（当前页投完点下一页）', 'checkbox'],
+  ['maxPages', '最多翻到第几页', 'number']
 ];
 
 export function mountConfigDrawer(root, { store, onSave }) {

@@ -26,7 +26,16 @@ export const SEL = {
   appliedText: /^(已投递|继续投递|投递成功)$/,
   /** 投递后需要再点的「去聊聊」 */
   chatText: /^(去聊聊|去聊聘|聊一聊|立即沟通)$/,
-  rejectText: /^(收藏|取消收藏|感兴趣|举报|分享|查职位)$/
+  rejectText: /^(收藏|取消收藏|感兴趣|举报|分享|查职位)$/,
+  /** 分页 */
+  nextBtnText: /^(下一页|下页|>)$/,
+  nextPageSel: [
+    '[class*="pagination"] [class*="next"]',
+    '[class*="page"] a.next',
+    '.btn-next',
+    'a[aria-label="下一页"]',
+    'button[aria-label="下一页"]'
+  ].join(', ')
 };
 
 export function textOf(el, sel) {

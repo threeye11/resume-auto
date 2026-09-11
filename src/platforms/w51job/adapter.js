@@ -41,11 +41,58 @@ export function createW51Adapter({ logger } = {}) {
     return isAppliedButton(btn);
   }
 
+  function clickLike(el) {
+    if (!el) return false;
+    try {
+      el.click();
+      return true;
+    } catch {
+      /* fallthrough */
+    }
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    return true;
+  }
+
+  function listSignature() {
+    const jobs = extractList();
+    return jobs.map((j) => j.id).join('|');
+  }
+
+  /** 点分页「下一页」；成功翻页且列表变化则 true */
+  async function nextPage() {
+    const before = listSignature();
+    let btn =
+      document.querySelector(SEL.nextPageSel) ||
+      Array.from(document.querySelectorAll('a, button, span')).find((el) =>
+        SEL.nextBtnText.test((el.textContent || '').replace(/\s/g, ''))
+      );
+    // 禁用态的下一页
+    if (btn && (btn.disabled || /disabled|is-disabled/.test(btn.className || ''))) {
+      btn = null;
+    }
+    if (!btn) {
+      logger?.emit('error', { where: 'page', msg: '下一页按钮未找到或已到末页' });
+      return false;
+    }
+    clickLike(btn);
+    // SPA 列表异步刷新
+    for (let i = 0; i < 12; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      const after = listSignature();
+      if (after && after !== before) return true;
+    }
+    const after = listSignature();
+    if (after && after !== before) return true;
+    logger?.emit('error', { where: 'page', msg: '点击下一页后列表未变化' });
+    return false;
+  }
+
   return {
     id: () => 'w51job',
     matchHost,
     extractList,
     isApplied,
+    nextPage,
     apply: (job) => applyJob(job, { logger }),
     sendGreeting: (job, greeting) => sendGreeting(job, greeting, { logger })
   };
