@@ -1,4 +1,4 @@
-import { SEL, textOf, makeId } from './selectors.js';
+import { SEL, textOf, makeId, findApplyButton, findDetailApplyButton } from './selectors.js';
 import { applyJob, sendGreeting } from './actions.js';
 
 export function createBossAdapter({ logger } = {}) {
@@ -27,9 +27,9 @@ export function createBossAdapter({ logger } = {}) {
   }
 
   function isApplied(job) {
-    const el = job.el;
-    if (!el) return false;
-    const btn = el.querySelector(SEL.applyBtn);
+    const root =
+      job.el?.closest?.('li.job-card-wrapper, li, .job-card-wrapper, .job-card-box') || job.el;
+    const btn = findApplyButton(root) || findDetailApplyButton();
     const txt = (btn?.textContent || '').trim();
     return SEL.appliedText.test(txt);
   }
