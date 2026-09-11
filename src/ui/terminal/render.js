@@ -10,13 +10,16 @@ function describe(e) {
   const p = e.payload || {};
   switch (e.type) {
     case 'scan':
-      return `扫描 ${p.count ?? 0} 条`;
+      return p.note || `扫描 ${p.count ?? 0} 条`;
     case 'filter':
-      return `筛选通过 ${p.pass ?? 0} / ${p.total ?? 0}`;
+      return `列表 ${p.total ?? 0} · 筛过 ${p.pass ?? 0} · 已投跳过 ${p.skippedApplied ?? 0} · 待投 ${p.pending ?? 0}`;
     case 'dedupe':
-      return `${p.title || p.id || ''} 已投跳过`;
+      return `#${p.index ?? '-'} ${p.title || p.id || ''} @${p.company || ''} 已投跳过`;
     case 'quota':
-      return p.stopped ? `已达今日上限 ${p.count}/${p.limit}` : `配额 ${p.count}/${p.limit}`;
+      if (p.stopped) {
+        return p.note || `已达今日上限 ${p.count}/${p.limit}`;
+      }
+      return `配额 ${p.count}/${p.limit}`;
     case 'apply':
       return `#${p.index ?? '-'} ${p.title || ''}@${p.company || ''} ${p.status || ''}`;
     case 'greet':
@@ -26,7 +29,7 @@ function describe(e) {
     case 'progress':
       return `进度 ${p.done ?? 0}/${p.total ?? 0}`;
     case 'done':
-      return `结束 成功${p.ok ?? 0} 跳过${p.skip ?? 0} 失败${p.fail ?? 0}`;
+      return `结束 成功${p.ok ?? 0} 跳过${p.skip ?? 0} 失败${p.fail ?? 0}${p.note ? ` · ${p.note}` : ''}`;
     default:
       return JSON.stringify(p);
   }

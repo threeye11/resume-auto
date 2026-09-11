@@ -22,7 +22,6 @@ export function createBossAdapter({ logger } = {}) {
       seen.add(id);
       jobs.push({ id, title, company, salaryText, city: area, el, href });
     }
-    logger?.emit('scan', { count: jobs.length });
     return jobs;
   }
 
