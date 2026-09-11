@@ -101,12 +101,21 @@ export async function applyJob(job, { logger } = {}) {
   const after = btnText(afterBtn);
   if (SEL.appliedText.test(after)) return 'ok';
 
-  await sleep(400);
-  const after2 = btnText(findDetailApplyButton() || afterBtn);
+  await sleep(500);
+  const after2 = btnText(findDetailApplyButton() || findApplyButton(root) || afterBtn);
   if (SEL.appliedText.test(after2)) return 'ok';
 
-  // 点击已发出、文案未变也记 ok，由日志观察
-  return 'ok';
+  // 仍显示「立即沟通」说明没点成功——不能记 ok，否则会污染去重库
+  if (after2 === '立即沟通' || after === '立即沟通') {
+    logger?.emit('error', {
+      where: 'apply',
+      jobId: job.id,
+      title: job.title,
+      msg: `click did not apply, still "${after2 || after}"`
+    });
+    return 'fail';
+  }
+  return 'fail';
 }
 
 function findVisibleChatInput() {

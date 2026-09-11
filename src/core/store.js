@@ -75,6 +75,14 @@ export function createStore(backend, { today = () => todayStr() } = {}) {
     backend.set(KEYS.quota, { date, count: 0 });
   }
 
+  function clearApplied() {
+    backend.set(KEYS.applied, []);
+  }
+
+  function resetQuota() {
+    backend.set(KEYS.quota, { date: today(), count: 0 });
+  }
+
   return {
     getConfig,
     updateConfig,
@@ -84,6 +92,8 @@ export function createStore(backend, { today = () => todayStr() } = {}) {
     getQuota,
     addQuota,
     resetQuotaForDate,
+    clearApplied,
+    resetQuota,
     today
   };
 }

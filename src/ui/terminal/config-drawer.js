@@ -82,6 +82,45 @@ export function mountConfigDrawer(root, { store, onSave }) {
   });
   drawer.appendChild(saveBtn);
 
+  // 维护：清除误记的已投 / 重置当日配额
+  const maint = document.createElement('div');
+  maint.className = 'ra-maint';
+  maint.style.display = 'flex';
+  maint.style.gap = '8px';
+  maint.style.marginTop = '10px';
+
+  const clearBtn = document.createElement('button');
+  clearBtn.type = 'button';
+  clearBtn.className = 'ra-btn ghost';
+  clearBtn.style.flex = '1';
+  clearBtn.textContent = '清除已投记录';
+  clearBtn.addEventListener('click', () => {
+    if (!window.confirm('清除本地已投 jobId 列表？（去重会重新允许投递）')) return;
+    store.clearApplied?.();
+    clearBtn.textContent = '已清除';
+    setTimeout(() => {
+      clearBtn.textContent = '清除已投记录';
+    }, 1200);
+  });
+
+  const resetQBtn = document.createElement('button');
+  resetQBtn.type = 'button';
+  resetQBtn.className = 'ra-btn ghost';
+  resetQBtn.style.flex = '1';
+  resetQBtn.textContent = '重置今日配额';
+  resetQBtn.addEventListener('click', () => {
+    if (!window.confirm('将今日已投次数清零？')) return;
+    store.resetQuota?.();
+    resetQBtn.textContent = '已重置';
+    setTimeout(() => {
+      resetQBtn.textContent = '重置今日配额';
+    }, 1200);
+  });
+
+  maint.appendChild(clearBtn);
+  maint.appendChild(resetQBtn);
+  drawer.appendChild(maint);
+
   root.appendChild(drawer);
   return {
     open: () => drawer.classList.add('open'),
