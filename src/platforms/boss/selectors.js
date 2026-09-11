@@ -10,30 +10,12 @@ export const SEL = {
   company: '.company-name, .boss-name, [class*="company-name"]',
   salary: '.salary, [class*="salary"]',
   area: '.job-area, .company-location, [class*="job-area"]',
-  /** 卡片上可能出现的投递按钮 */
-  applyBtn: [
-    '.op-btn',
-    '.btn-startchat',
-    '.start-chat-btn',
-    '[class*="start-chat"]',
-    'button[class*="communicate"]',
-    'button[class*="startchat"]',
-    '.job-card-op button',
-    '.job-card-body .op-btn'
-  ].join(', '),
-  /** 右侧详情区投递按钮容器 */
-  detailPanel: '.job-detail-box, .job-detail, .detail-box, [class*="job-detail"], [class*="job-detail-wrapper"]',
-  detailApplyBtn: [
-    '.btn-startchat',
-    '.start-chat-btn',
-    '[class*="start-chat"]',
-    'button[class*="communicate"]',
-    '.job-detail-box .op-btn',
-    '.job-detail .btn',
-    '.job-detail button'
-  ].join(', '),
-  /** 按钮文案匹配投递 */
-  applyText: /^立即沟通$|^继续沟通$|^投递简历$/,
+  detailPanel:
+    '.job-detail-box, .job-detail, .detail-box, [class*="job-detail"], [class*="job-detail-wrapper"]',
+  /** 仅接受这些文案为投递按钮（已去空白） */
+  applyText: /^(立即沟通|继续沟通|投递简历)$/,
+  /** 明确排除，绝不能点 */
+  rejectText: /^(收藏|取消收藏|已收藏|分享|举报|感兴趣)$/,
   appliedText: /继续沟通|已沟通/,
   cardLink: 'a'
 };
@@ -52,34 +34,44 @@ export function makeId(title, company, salary, href) {
   return `boss_${(h >>> 0).toString(36)}`;
 }
 
-/** 在 root 内按选择器或按钮文案找「立即沟通」 */
+export function normalizeBtnText(el) {
+  return (el?.textContent || '').replace(/\s+/g, '');
+}
+
+/** 文案是否为投递按钮（严格，排除收藏等） */
+export function isApplyButton(el) {
+  if (!el) return false;
+  const t = normalizeBtnText(el);
+  if (!t) return false;
+  if (SEL.rejectText.test(t)) return false;
+  return SEL.applyText.test(t);
+}
+
+function collectCandidates(root) {
+  const list = root.querySelectorAll?.(
+    'a, button, .btn, [role="button"], span[class*="btn"], div[class*="btn"]'
+  );
+  return list ? Array.from(list) : [];
+}
+
+/** 在 root 内严格按文案找「立即沟通」；找不到返回 null（绝不点收藏） */
 export function findApplyButton(root) {
   if (!root) return null;
-  const fromSel = root.querySelector?.(SEL.applyBtn);
-  if (fromSel && SEL.applyText.test((fromSel.textContent || '').trim())) {
-    return fromSel;
+  for (const b of collectCandidates(root)) {
+    if (isApplyButton(b)) return b;
   }
-  const buttons = root.querySelectorAll?.('button, a.btn, .btn, [role="button"]') || [];
-  for (const b of buttons) {
-    const t = (b.textContent || '').trim();
-    if (SEL.applyText.test(t)) return b;
-  }
-  // 选择器命中但文案不标准时，仍用选择器结果（可能是图标按钮）
-  return fromSel || null;
+  return null;
 }
 
 export function findDetailApplyButton() {
-  // 1) 详情面板容器
   const panels = Array.from(document.querySelectorAll(SEL.detailPanel));
   for (const scope of panels.length ? panels : []) {
     const btn = findApplyButton(scope);
     if (btn) return btn;
   }
-  // 2) 整页按文案找「立即沟通」（含 a / button / .btn）
-  const all = document.querySelectorAll('a, button, .btn, [role="button"], span[class*="btn"]');
-  for (const b of all) {
-    const t = (b.textContent || '').replace(/\s/g, '');
-    if (SEL.applyText.test(t)) return b;
+  // 整页严格文案匹配
+  for (const b of collectCandidates(document)) {
+    if (isApplyButton(b)) return b;
   }
   return null;
 }

@@ -1,4 +1,4 @@
-import { SEL, findApplyButton, findDetailApplyButton } from './selectors.js';
+import { SEL, findApplyButton, findDetailApplyButton, isApplyButton, normalizeBtnText } from './selectors.js';
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -30,11 +30,11 @@ function cardRoot(job) {
 }
 
 function btnText(btn) {
-  return (btn?.textContent || '').trim();
+  return normalizeBtnText(btn);
 }
 
 /**
- * 策略：
+ * 策略（严格按文案，绝不点「收藏」）：
  * 1. 卡片上有「立即沟通」→ 直接点
  * 2. 没有 → 点卡片选中，再在右侧详情里点「立即沟通」
  */
@@ -52,7 +52,7 @@ export async function applyJob(job, { logger } = {}) {
   let btn = findApplyButton(root);
   let viaDetail = false;
 
-  if (!btn || !SEL.applyText.test(btnText(btn))) {
+  if (!btn) {
     // 点击卡片让右侧详情刷新
     const cardLink = root.querySelector(SEL.cardLink) || root;
     clickLike(cardLink);
@@ -60,24 +60,29 @@ export async function applyJob(job, { logger } = {}) {
     btn = findDetailApplyButton();
     viaDetail = true;
     if (!btn) {
-      // 再等一轮，详情区可能异步渲染
       await sleep(400);
       btn = findDetailApplyButton();
     }
   }
 
-  if (!btn) {
+  if (!btn || !isApplyButton(btn)) {
     logger?.emit('error', {
       where: 'apply',
       jobId: job.id,
       title: job.title,
-      msg: 'apply button not found on card or detail'
+      msg: `apply button not found (nearest="${btnText(btn)}")`
     });
     return 'fail';
   }
 
   if (SEL.appliedText.test(btnText(btn))) return 'skip';
 
+  logger?.emit('apply', {
+    jobId: job.id,
+    title: job.title,
+    status: `click:${btnText(btn)}`,
+    viaDetail
+  });
   clickLike(btn);
   await sleep(450);
 
