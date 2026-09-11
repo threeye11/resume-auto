@@ -23,6 +23,9 @@ function describe(e) {
     case 'apply':
       return `#${p.index ?? '-'} ${p.title || ''}@${p.company || ''} ${p.status || ''}`;
     case 'greet':
+      if (p.status === 'default') {
+        return p.note || `招呼 ${p.title || ''} · 用 BOSS 默认招呼语`;
+      }
       return `招呼 ${p.status || ''}`;
     case 'error':
       return `错误 ${p.where || ''}: ${p.msg || p.error || ''}`;

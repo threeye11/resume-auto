@@ -33,10 +33,75 @@ function btnText(btn) {
   return normalizeBtnText(btn);
 }
 
+function findDialogRoot() {
+  const sels = [
+    '[class*="boss-dialog"]',
+    '[class*="dialog-box"]',
+    '[class*="modal"]',
+    '[role="dialog"]'
+  ];
+  for (const sel of sels) {
+    for (const el of document.querySelectorAll(sel)) {
+      const r = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      if (r.width < 120 || r.height < 60) continue;
+      if (style.display === 'none' || style.visibility === 'hidden') continue;
+      const t = el.textContent || '';
+      if (/已向BOSS发送消息|立即沟通|招呼|继续沟通|留在此页/.test(t)) return el;
+    }
+  }
+  return null;
+}
+
+function findByText(root, re) {
+  const scope = root || document;
+  const nodes = scope.querySelectorAll('a, button, .btn, [role="button"], span[class*="btn"]');
+  for (const el of nodes) {
+    if (re.test(btnText(el))) return el;
+  }
+  return null;
+}
+
+/**
+ * 处理「已向BOSS发送消息」弹窗。
+ * 默认点「留在此页」，以便继续在列表页批量投递。
+ * @returns {Promise<'stayed'|'to-chat'|'none'>}
+ */
+async function dismissApplyDialog({ logger } = {}) {
+  for (let i = 0; i < 4; i++) {
+    const dialog = findDialogRoot();
+    if (!dialog) {
+      await sleep(200);
+      continue;
+    }
+    const sent = /已向BOSS发送消息/.test(dialog.textContent || '');
+    const stay = findByText(dialog, /^留在此页$/);
+    const chat = findByText(dialog, /^继续沟通$/);
+
+    // 点「留在此页」——批量投递必须留在列表
+    if (stay) {
+      clickLike(stay);
+      await sleep(300);
+      logger?.emit('apply', { status: 'dialog:留在此页', defaultGreeting: sent });
+      return 'stayed';
+    }
+    if (chat && !stay) {
+      // 没有「留在此页」时才进会话（会离开列表，批量慎用）
+      clickLike(chat);
+      await sleep(400);
+      return 'to-chat';
+    }
+    // 弹窗存在但按钮未渲染完
+    await sleep(200);
+  }
+  return 'none';
+}
+
 /**
  * 策略（严格按文案，绝不点「收藏」）：
  * 1. 卡片上有「立即沟通」→ 直接点
  * 2. 没有 → 点卡片选中，再在右侧详情里点「立即沟通」
+ * 3. 处理「已向BOSS发送消息」→ 点「留在此页」
  */
 export async function applyJob(job, { logger } = {}) {
   const root = cardRoot(job);
@@ -53,7 +118,6 @@ export async function applyJob(job, { logger } = {}) {
   let viaDetail = false;
 
   if (!btn) {
-    // 点击卡片让右侧详情刷新
     const cardLink = root.querySelector(SEL.cardLink) || root;
     clickLike(cardLink);
     await sleep(600);
@@ -77,41 +141,30 @@ export async function applyJob(job, { logger } = {}) {
 
   if (SEL.appliedText.test(btnText(btn))) return 'skip';
 
-  logger?.emit('apply', {
-    jobId: job.id,
-    title: job.title,
-    status: `click:${btnText(btn)}`,
-    viaDetail
-  });
   clickLike(btn);
-  await sleep(450);
+  await sleep(400);
 
-  // 弹窗确认（招呼语 / 确认投递）
-  const dialogSend =
-    document.querySelector('.boss-dialog .btn, .dialog-footer .btn, [class*="dialog"] .btn') ||
-    Array.from(document.querySelectorAll('button, .btn')).find((b) =>
-      /^(发送|确定|发送并继续)$/.test(btnText(b))
-    );
-  if (dialogSend && dialogSend !== btn) {
-    clickLike(dialogSend);
-    await sleep(350);
-  }
+  const dialogResult = await dismissApplyDialog({ logger });
 
-  const afterBtn = viaDetail ? findDetailApplyButton() : findApplyButton(root) || findDetailApplyButton();
+  const afterBtn = viaDetail
+    ? findDetailApplyButton()
+    : findApplyButton(root) || findDetailApplyButton();
   const after = btnText(afterBtn);
   if (SEL.appliedText.test(after)) return 'ok';
 
-  await sleep(500);
+  await sleep(400);
   const after2 = btnText(findDetailApplyButton() || findApplyButton(root) || afterBtn);
   if (SEL.appliedText.test(after2)) return 'ok';
 
-  // 仍显示「立即沟通」说明没点成功——不能记 ok，否则会污染去重库
+  // 弹窗已确认发送（已向BOSS发送消息 + 留在此页）→ 视为成功
+  if (dialogResult === 'stayed') return 'ok';
+
   if (after2 === '立即沟通' || after === '立即沟通') {
     logger?.emit('error', {
       where: 'apply',
       jobId: job.id,
       title: job.title,
-      msg: `click did not apply, still "${after2 || after}"`
+      msg: `click did not apply, still "${after2 || after}", dialog=${dialogResult}`
     });
     return 'fail';
   }

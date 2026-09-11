@@ -161,9 +161,19 @@ export function createPipeline({ adapter, store, logger }) {
           status: 'ok'
         });
         if (cfg.greeting && String(cfg.greeting).trim()) {
-          await new Promise((r2) => setTimeout(r2, 800));
+          // BOSS 在点「立即沟通」时已用「消息-设置招呼语」发过默认文案；
+          // 列表页留在此页后通常没有输入框。仅在能打开会话时补发自定义语。
+          await new Promise((r2) => setTimeout(r2, 600));
           const g = await adapter.sendGreeting(job, cfg.greeting);
-          logger.emit('greet', { status: g, title: job.title });
+          if (g === 'ok') {
+            logger.emit('greet', { status: 'ok', title: job.title });
+          } else {
+            logger.emit('greet', {
+              status: 'default',
+              title: job.title,
+              note: '已用 BOSS 默认招呼语；列表页无输入框，未再发脚本配置文案'
+            });
+          }
         }
       } else if (r === 'skip') {
         skip += 1;
