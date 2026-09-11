@@ -47,7 +47,7 @@ function findDialogRoot() {
       if (r.width < 120 || r.height < 60) continue;
       if (style.display === 'none' || style.visibility === 'hidden') continue;
       const t = el.textContent || '';
-      if (/已向BOSS发送消息|立即沟通|招呼|继续沟通|留在此页/.test(t)) return el;
+      if (/已向BOSS发送消息|留在此页|继续沟通/.test(t)) return el;
     }
   }
   return null;
@@ -62,46 +62,45 @@ function findByText(root, re) {
   return null;
 }
 
+/** 找「留在此页」：优先弹窗内，再整页（绝不点继续沟通） */
+function findStayButton() {
+  const dialog = findDialogRoot();
+  if (dialog) {
+    const stay = findByText(dialog, /^留在此页$/);
+    if (stay) return stay;
+  }
+  return findByText(document, /^留在此页$/);
+}
+
 /**
  * 处理「已向BOSS发送消息」弹窗。
- * 默认点「留在此页」，以便继续在列表页批量投递。
- * @returns {Promise<'stayed'|'to-chat'|'none'>}
+ * 批量投递：只点「留在此页」，绝不能点「继续沟通」（会跳进聊天页打断队列）。
  */
 async function dismissApplyDialog({ logger } = {}) {
-  for (let i = 0; i < 4; i++) {
-    const dialog = findDialogRoot();
-    if (!dialog) {
-      await sleep(200);
-      continue;
-    }
-    const sent = /已向BOSS发送消息/.test(dialog.textContent || '');
-    const stay = findByText(dialog, /^留在此页$/);
-    const chat = findByText(dialog, /^继续沟通$/);
-
-    // 点「留在此页」——批量投递必须留在列表
+  for (let i = 0; i < 6; i++) {
+    const stay = findStayButton();
     if (stay) {
       clickLike(stay);
-      await sleep(300);
-      logger?.emit('apply', { status: 'dialog:留在此页', defaultGreeting: sent });
+      await sleep(350);
+      // 弹窗若还在，再点一次
+      if (findStayButton()) {
+        clickLike(findStayButton());
+        await sleep(250);
+      }
+      logger?.emit('apply', { status: 'dialog:留在此页' });
       return 'stayed';
     }
-    if (chat && !stay) {
-      // 没有「留在此页」时才进会话（会离开列表，批量慎用）
-      clickLike(chat);
-      await sleep(400);
-      return 'to-chat';
-    }
-    // 弹窗存在但按钮未渲染完
-    await sleep(200);
+    // 弹窗可能刚出来按钮还没挂上
+    await sleep(180);
   }
   return 'none';
 }
 
 /**
- * 策略（严格按文案，绝不点「收藏」）：
+ * 策略（严格按文案，绝不点「收藏」「继续沟通」）：
  * 1. 卡片上有「立即沟通」→ 直接点
  * 2. 没有 → 点卡片选中，再在右侧详情里点「立即沟通」
- * 3. 处理「已向BOSS发送消息」→ 点「留在此页」
+ * 3. 弹窗 → 只点「留在此页」
  */
 export async function applyJob(job, { logger } = {}) {
   const root = cardRoot(job);
@@ -110,7 +109,7 @@ export async function applyJob(job, { logger } = {}) {
     return 'fail';
   }
 
-  // 已投过
+  // 已投过（文案变成继续沟通）
   const existing = findApplyButton(root) || findDetailApplyButton();
   if (existing && SEL.appliedText.test(btnText(existing))) return 'skip';
 
@@ -139,10 +138,19 @@ export async function applyJob(job, { logger } = {}) {
     return 'fail';
   }
 
-  if (SEL.appliedText.test(btnText(btn))) return 'skip';
+  // 绝不点「继续沟通」——那会进聊天
+  if (btnText(btn) === '继续沟通') return 'skip';
+  if (btnText(btn) !== '立即沟通' && btnText(btn) !== '投递简历') {
+    logger?.emit('error', {
+      where: 'apply',
+      jobId: job.id,
+      msg: `refuse to click "${btnText(btn)}"`
+    });
+    return 'fail';
+  }
 
   clickLike(btn);
-  await sleep(400);
+  await sleep(450);
 
   const dialogResult = await dismissApplyDialog({ logger });
 
@@ -156,7 +164,6 @@ export async function applyJob(job, { logger } = {}) {
   const after2 = btnText(findDetailApplyButton() || findApplyButton(root) || afterBtn);
   if (SEL.appliedText.test(after2)) return 'ok';
 
-  // 弹窗已确认发送（已向BOSS发送消息 + 留在此页）→ 视为成功
   if (dialogResult === 'stayed') return 'ok';
 
   if (after2 === '立即沟通' || after === '立即沟通') {
@@ -193,40 +200,20 @@ function findVisibleChatInput() {
   return null;
 }
 
-function findContinueChatButton() {
-  const nodes = document.querySelectorAll('a, button, .btn, [role="button"]');
-  for (const b of nodes) {
-    const t = (b.textContent || '').replace(/\s/g, '');
-    if (t === '继续沟通') return b;
-  }
-  return null;
-}
-
+/**
+ * 补发自定义招呼语。
+ * 批量模式：只在当前页已有输入框时写入；绝不点「继续沟通」跳转聊天。
+ */
 export async function sendGreeting(job, greeting, { logger } = {}) {
   if (!greeting || !String(greeting).trim()) return 'fail';
   const text = String(greeting).replace(/<br\s*\/?>/gi, '\n');
 
-  // 列表页点完「立即沟通」后，聊天框可能延迟出现；先等再找
   let input = findVisibleChatInput();
   if (!input) {
-    const cont = findContinueChatButton();
-    if (cont) {
-      clickLike(cont);
-      await sleep(600);
-      input = findVisibleChatInput();
-    }
-  }
-  if (!input) {
-    await sleep(500);
+    await sleep(400);
     input = findVisibleChatInput();
   }
-
   if (!input) {
-    logger?.emit('error', {
-      where: 'greet',
-      jobId: job.id,
-      msg: 'chat input not found（列表页投递后未弹出会话；可清空招呼语或稍后在消息页手动发）'
-    });
     return 'fail';
   }
 
@@ -241,13 +228,15 @@ export async function sendGreeting(job, greeting, { logger } = {}) {
     input.dispatchEvent(new Event('change', { bubbles: true }));
   } else {
     input.textContent = text;
-    input.dispatchEvent(new InputEvent('input', { bubbles: true, data: text, inputType: 'insertText' }));
+    input.dispatchEvent(
+      new InputEvent('input', { bubbles: true, data: text, inputType: 'insertText' })
+    );
   }
   await sleep(250);
 
   const sendBtn =
     Array.from(document.querySelectorAll('button, .btn')).find((b) =>
-      /^发送$/.test((b.textContent || '').replace(/\s/g, ''))
+      /^发送$/.test(btnText(b))
     ) || document.querySelector('.btn-send, .chat-input button');
   if (!sendBtn) {
     logger?.emit('error', { where: 'greet', jobId: job.id, msg: 'send button not found' });
