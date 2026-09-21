@@ -259,6 +259,12 @@ export function createPipeline({ adapter, store, logger }) {
       }
 
       running = false;
+      if (typeof adapter.id === 'function' && adapter.id() === 'boss') {
+        logger.emit('error', {
+          where: 'pipeline',
+          msg: '投递结束。深聊/自动回复请打开 https://www.zhipin.com/web/geek/chat（功能仅在 chat 页生效）'
+        });
+      }
       logger.emit('done', {
         ok: acc.ok,
         skip: acc.skip,

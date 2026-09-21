@@ -12,19 +12,52 @@ const FIELDS = [
   ['maxPages', '最多翻到第几页', 'number']
 ];
 
-export function mountConfigDrawer(root, { store, onSave }) {
+/** chat 页配置字段（支持 llm.* 路径） */
+export const CHAT_FIELDS = [
+  ['proactiveEnabled', '主动问候开关（仅聊天页）', 'checkbox'],
+  ['proactiveSource', '问候来源 custom|llm', 'text'],
+  ['proactiveCustom', '自定义主动问候（2–3句）', 'textarea'],
+  ['autoReplyEnabled', 'HR回复自动起草（草稿+确认）', 'checkbox'],
+  ['resumeMarkdown', '简历 Markdown', 'textarea'],
+  ['targetRole', '目标岗位/行业', 'text'],
+  ['llm.baseUrl', 'LLM baseUrl（OpenAI兼容）', 'text'],
+  ['llm.apiKey', 'LLM API Key', 'text'],
+  ['llm.model', 'LLM model', 'text'],
+  ['llm.systemTemplate', '系统提示词模板（可编辑）', 'textarea'],
+  ['proactiveMaxPerRun', '单次最多问候会话数', 'number']
+];
+
+function getPath(obj, path) {
+  return String(path)
+    .split('.')
+    .reduce((o, k) => (o == null ? undefined : o[k]), obj);
+}
+
+function setPath(obj, path, value) {
+  const keys = path.split('.');
+  let o = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (typeof o[keys[i]] !== 'object' || o[keys[i]] == null) o[keys[i]] = {};
+    o = o[keys[i]];
+  }
+  o[keys[keys.length - 1]] = value;
+}
+
+export function mountConfigDrawer(root, { store, onSave, fields } = {}) {
+  const list = fields || FIELDS;
   const drawer = document.createElement('div');
   drawer.className = 'ra-drawer';
   const cfg = store.getConfig();
   const inputs = {};
 
-  for (const [key, label, type] of FIELDS) {
+  for (const [key, label, type] of list) {
+    const val = getPath(cfg, key);
     if (type === 'checkbox') {
       const wrap = document.createElement('label');
       wrap.className = 'ra-check';
       const el = document.createElement('input');
       el.type = 'checkbox';
-      el.checked = Boolean(cfg[key]);
+      el.checked = Boolean(val);
       const span = document.createElement('span');
       span.textContent = label;
       wrap.appendChild(el);
@@ -45,17 +78,14 @@ export function mountConfigDrawer(root, { store, onSave }) {
     let el;
     if (type === 'textarea') {
       el = document.createElement('textarea');
-      el.value = cfg[key] ?? '';
-      el.placeholder = '投递成功后可选发送…';
+      el.value = val ?? '';
     } else {
       el = document.createElement('input');
       el.type = type === 'number' ? 'number' : 'text';
-      el.value = cfg[key] ?? '';
+      el.value = val ?? '';
       if (type === 'number') {
         el.min = '0';
         el.step = '1';
-      } else {
-        el.placeholder = '逗号分隔，留空不限';
       }
     }
     field.appendChild(el);
@@ -69,11 +99,13 @@ export function mountConfigDrawer(root, { store, onSave }) {
   saveBtn.textContent = '保存配置';
   saveBtn.addEventListener('click', () => {
     const partial = {};
-    for (const [key, , type] of FIELDS) {
+    for (const [key, , type] of list) {
       const { el } = inputs[key];
-      if (type === 'checkbox') partial[key] = el.checked;
-      else if (type === 'number') partial[key] = Number(el.value) || 0;
-      else partial[key] = el.value;
+      let v;
+      if (type === 'checkbox') v = el.checked;
+      else if (type === 'number') v = Number(el.value) || 0;
+      else v = el.value;
+      setPath(partial, key, v);
     }
     store.updateConfig(partial);
     saveBtn.textContent = '已保存';
@@ -84,44 +116,39 @@ export function mountConfigDrawer(root, { store, onSave }) {
   });
   drawer.appendChild(saveBtn);
 
-  // 维护：清除误记的已投 / 重置当日配额
-  const maint = document.createElement('div');
-  maint.className = 'ra-maint';
-  maint.style.display = 'flex';
-  maint.style.gap = '8px';
-  maint.style.marginTop = '10px';
+  if (typeof store.clearApplied === 'function' || typeof store.resetQuota === 'function') {
+    const maint = document.createElement('div');
+    maint.className = 'ra-maint';
+    maint.style.display = 'flex';
+    maint.style.gap = '8px';
+    maint.style.marginTop = '10px';
 
-  const clearBtn = document.createElement('button');
-  clearBtn.type = 'button';
-  clearBtn.className = 'ra-btn ghost';
-  clearBtn.style.flex = '1';
-  clearBtn.textContent = '清除已投记录';
-  clearBtn.addEventListener('click', () => {
-    if (!window.confirm('清除本地已投 jobId 列表？（去重会重新允许投递）')) return;
-    store.clearApplied?.();
-    clearBtn.textContent = '已清除';
-    setTimeout(() => {
+    if (typeof store.clearApplied === 'function') {
+      const clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'ra-btn ghost';
+      clearBtn.style.flex = '1';
       clearBtn.textContent = '清除已投记录';
-    }, 1200);
-  });
-
-  const resetQBtn = document.createElement('button');
-  resetQBtn.type = 'button';
-  resetQBtn.className = 'ra-btn ghost';
-  resetQBtn.style.flex = '1';
-  resetQBtn.textContent = '重置今日配额';
-  resetQBtn.addEventListener('click', () => {
-    if (!window.confirm('将今日已投次数清零？')) return;
-    store.resetQuota?.();
-    resetQBtn.textContent = '已重置';
-    setTimeout(() => {
+      clearBtn.addEventListener('click', () => {
+        if (!window.confirm('清除本地已投 jobId 列表？（去重会重新允许投递）')) return;
+        store.clearApplied();
+      });
+      maint.appendChild(clearBtn);
+    }
+    if (typeof store.resetQuota === 'function') {
+      const resetQBtn = document.createElement('button');
+      resetQBtn.type = 'button';
+      resetQBtn.className = 'ra-btn ghost';
+      resetQBtn.style.flex = '1';
       resetQBtn.textContent = '重置今日配额';
-    }, 1200);
-  });
-
-  maint.appendChild(clearBtn);
-  maint.appendChild(resetQBtn);
-  drawer.appendChild(maint);
+      resetQBtn.addEventListener('click', () => {
+        if (!window.confirm('将今日已投次数清零？')) return;
+        store.resetQuota();
+      });
+      maint.appendChild(resetQBtn);
+    }
+    drawer.appendChild(maint);
+  }
 
   root.appendChild(drawer);
   return {

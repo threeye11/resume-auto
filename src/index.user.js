@@ -4,6 +4,8 @@ import { createPipeline } from './core/pipeline.js';
 import { createBossAdapter } from './platforms/boss/adapter.js';
 import { createW51Adapter } from './platforms/w51job/adapter.js';
 import { mountTerminal } from './ui/terminal/terminal.js';
+import { isChatPage } from './platforms/boss/chat/selectors.js';
+import { bootChatIfNeeded } from './ui/chat/chatMode.js';
 
 function pickAdapter(logger) {
   const host = location.hostname;
@@ -12,14 +14,12 @@ function pickAdapter(logger) {
   return null;
 }
 
-function boot() {
+function bootJobsMode() {
   const logger = createLogger();
   const adapter = pickAdapter(logger);
   if (!adapter || !adapter.matchHost()) return;
 
-  // 配置/已投/日配额按站点隔离（boss 与 w51job 互不影响）
   const store = createStore(gmBackend(), { ns: adapter.id() });
-
   const pipeline = createPipeline({ adapter, store, logger });
   const ui = mountTerminal({
     logger,
@@ -40,8 +40,26 @@ function boot() {
     }
   });
 
+  // 配额完成后提示聊天闭环入口
+  logger.on('done', (p) => {
+    if (adapter.id() === 'boss') {
+      logger.emit('error', {
+        where: 'boot',
+        msg: '自动问候/自动回复仅在聊天页生效，请打开 https://www.zhipin.com/web/geek/chat 并在配置中开启开关'
+      });
+    }
+  });
+
   window.__ra = { adapter, logger, store, pipeline, ui };
   ui.setStatus(`就绪 · ${adapter.id()} · 配置后点开始`);
+}
+
+function boot() {
+  if (isChatPage()) {
+    bootChatIfNeeded();
+    return;
+  }
+  bootJobsMode();
 }
 
 if (document.readyState === 'loading') {

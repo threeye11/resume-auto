@@ -1,13 +1,8 @@
 # resume-auto
 
-Tampermonkey（篡改猴）用户脚本：在浏览器里对招聘站列表页做**筛选、去重、限配额批量投递**，右下角带浮层终端实时看日志。
+Tampermonkey 用户脚本：招聘站筛选批量投递 + BOSS 聊天页闭环沟通。
 
-**已适配平台**
-
-| 平台 | 入口 | 投递动作 |
-|------|------|----------|
-| BOSS直聘 | [www.zhipin.com](https://www.zhipin.com) 职位列表 | 「立即沟通」→ 弹窗点「留在此页」 |
-| 前程无忧 51job | [we.51job.com/pc/search](https://we.51job.com/pc/search) | 橙色「投递」→ 关确认弹窗（不点「去聊聊」） |
+**已适配：** BOSS直聘（投递 + 聊天页）· 前程无忧（投递）
 
 ---
 
@@ -119,6 +114,28 @@ npm run dev
 |------|------|
 | BOSS | `src/platforms/boss/selectors.js` |
 | 51job | `src/platforms/w51job/selectors.js` |
+
+---
+
+## 聊天页闭环（BOSS only）
+
+**仅在** `https://www.zhipin.com/web/geek/chat` 生效。jobs 列表页投递结束后日志会提示打开聊天页。
+
+### 配置（chat 页 → 浮层「配置」）
+
+| 字段 | 说明 |
+|------|------|
+| 主动问候开关 | 默认关；开启后「开始」会跑问候队列 |
+| 问候来源 custom\|llm | `custom` 用下方自定义文案；`llm` 用大模型生成（仍为草稿确认） |
+| 自定义主动问候 | 2–3 句；`custom` 模式下直接发送（带间隔与单次上限） |
+| HR回复自动起草 | 开启后监听对方新消息，生成**草稿**，需点「发送」 |
+| 简历 Markdown | 粘贴简历全文 |
+| 目标岗位/行业 | 可选 |
+| LLM baseUrl / apiKey / model | OpenAI 兼容（DeepSeek、通义等） |
+
+**安全默认：** 不自动替你发送 LLM 回复；API Key 仅存本地；日志不打印完整 Key。
+
+设计说明见 `docs/compose/spec/hr-chat.md`。
 
 ---
 

@@ -32,7 +32,7 @@ function clamp(n, min, max) {
   return Math.min(Math.max(n, min), max);
 }
 
-export function mountTerminal({ logger, store, controls }) {
+export function mountTerminal({ logger, store, controls, configFields } = {}) {
   const existing = document.getElementById('ra-root');
   if (existing) return existing;
 
@@ -89,7 +89,7 @@ export function mountTerminal({ logger, store, controls }) {
   const ballCode = root.querySelector('#ra-ball-code');
   const header = root.querySelector('.ra-header');
   const maxBtn = root.querySelector('[data-act="maximize"]');
-  const drawer = mountConfigDrawer(root, { store });
+  const drawer = mountConfigDrawer(root, { store, fields: configFields });
 
   let statusText = '空闲';
   let collapsed = false;
