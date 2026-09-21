@@ -135,7 +135,17 @@ npm run dev
 
 **安全默认：** 不自动替你发送 LLM 回复；API Key 仅存本地；日志不打印完整 Key。
 
-设计说明见 `docs/compose/spec/hr-chat.md`。
+### 保险库（PIN 加密）
+
+敏感字段（`llm.apiKey`、简历 MD、目标岗位、主动问候文案、招呼语等）可用 **PIN + AES-GCM(256) + PBKDF2(SHA-256, 310000 次)** 加密：
+
+1. 聊天页 → 配置 → **保险库** → 输入 PIN →「设置 PIN 并加密」
+2. 日常「解锁」后脚本才能读 API Key / 简历；超时或「锁定」后内存清空
+3. 自动锁定分钟数可配（默认 15，**上限 43200 = 30 天**）
+4. 「修改 PIN」会换盐并重新加密；「重置保险库」删除密文（**请自行轮换 API Key**）
+5. PIN **从不写入** GM/日志；GM 中只有 salt + iv + 密文
+
+设计：`docs/compose/spec/secure-secrets.md`
 
 ---
 

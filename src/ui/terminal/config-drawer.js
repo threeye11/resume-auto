@@ -79,6 +79,11 @@ export function mountConfigDrawer(root, { store, onSave, fields } = {}) {
     if (type === 'textarea') {
       el = document.createElement('textarea');
       el.value = val ?? '';
+    } else if (type === 'password') {
+      el = document.createElement('input');
+      el.type = 'password';
+      el.autocomplete = 'off';
+      el.value = '';
     } else {
       el = document.createElement('input');
       el.type = type === 'number' ? 'number' : 'text';
@@ -104,15 +109,28 @@ export function mountConfigDrawer(root, { store, onSave, fields } = {}) {
       let v;
       if (type === 'checkbox') v = el.checked;
       else if (type === 'number') v = Number(el.value) || 0;
+      else if (type === 'password') v = el.value;
       else v = el.value;
       setPath(partial, key, v);
     }
-    store.updateConfig(partial);
-    saveBtn.textContent = '已保存';
-    setTimeout(() => {
-      saveBtn.textContent = '保存配置';
-    }, 1200);
-    onSave?.(partial);
+    Promise.resolve(store.updateConfig(partial))
+      .then(() => {
+        saveBtn.textContent = '已保存';
+        onSave?.(partial);
+      })
+      .catch((e) => {
+        saveBtn.textContent = '保存失败';
+        try {
+          window.alert(String(e?.message || e));
+        } catch {
+          /* ignore */
+        }
+      })
+      .finally(() => {
+        setTimeout(() => {
+          saveBtn.textContent = '保存配置';
+        }, 1200);
+      });
   });
   drawer.appendChild(saveBtn);
 

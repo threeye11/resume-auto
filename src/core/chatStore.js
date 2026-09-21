@@ -51,9 +51,14 @@ export function createChatStore(backend, { today = () => todayStr() } = {}) {
     const cur = getConfig();
     const next = {
       ...cur,
-      ...partial,
-      llm: { ...cur.llm, ...(partial.llm || {}) }
+      ...partial
     };
+    if (partial.llm !== undefined) {
+      // 整对象替换（默认值 + partial），避免合并残留旧 apiKey
+      next.llm = { ...CHAT_DEFAULT_CONFIG.llm, ...(partial.llm || {}) };
+    } else {
+      next.llm = cur.llm;
+    }
     backend.set(KEYS.config, next);
     return next;
   }

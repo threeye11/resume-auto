@@ -14,6 +14,8 @@ import {
 } from '../../platforms/boss/chat/selectors.js';
 import { clickConversation, sendChatMessage } from '../../platforms/boss/chat/send.js';
 import { createChatPoller } from '../../platforms/boss/chat/poller.js';
+import { createVaultStore } from '../../core/vault.js';
+import { mountVaultPanel, createVaultAwareChatStore } from '../vaultPanel.js';
 
 function memBackend() {
   const m = new Map();
@@ -24,21 +26,40 @@ function memBackend() {
   };
 }
 
-export function mountChatMode({ logger, store, backend } = {}) {
+export function mountChatMode({ logger, store, backend, vault } = {}) {
   const log = logger || createLogger();
-  const chatBackend = backend || (store ? null : defaultChatBackend());
-  const chatStore = store || createChatStore(chatBackend);
+  const usedBackend =
+    backend || (store ? null : typeof GM_getValue === 'function' ? gmBackend() : memBackend());
+  const chatStoreRaw = store || createChatStore(usedBackend);
+  const vaultStore = vault || createVaultStore(usedBackend || gmBackendSafe());
+  const chatStore = createVaultAwareChatStore(chatStoreRaw, vaultStore);
   const drafts = [];
   const draftListeners = new Set();
 
-  function defaultChatBackend() {
+  function gmBackendSafe() {
     try {
       if (typeof GM_getValue === 'function') return gmBackend();
     } catch {
-      /* node test */
+      /* node */
     }
     return memBackend();
   }
+
+  /** 合并 vault 中的敏感字段到配置视图 */
+  function effectiveConfig() {
+    return chatStore.getEffectiveConfig();
+  }
+
+  function assertLlmReady(cfg) {
+    if (vaultStore.isEnabled() && !vaultStore.isUnlocked()) {
+      return '保险库已锁定，请先在配置中输入 PIN 解锁';
+    }
+    return validateLlmConfig(cfg);
+  }
+
+  vaultStore.onLock?.(() => {
+    log.emit('error', { where: 'vault', msg: '保险库已自动锁定，敏感字段已从内存清除' });
+  });
 
   function emitDraft(d) {
     drafts.push(d);
@@ -53,16 +74,16 @@ export function mountChatMode({ logger, store, backend } = {}) {
   let chatPaused = false;
 
   async function runProactive() {
-    const cfg = chatStore.getConfig();
+    const cfg = effectiveConfig();
     chatPaused = false;
     if (!cfg.proactiveEnabled) {
       log.emit('error', { where: 'chat', msg: '未开启主动问候开关' });
       return;
     }
     if (cfg.proactiveSource === 'llm') {
-      const err = validateLlmConfig(cfg);
+      const err = assertLlmReady(cfg);
       if (err) {
-        log.emit('error', { where: 'chat', msg: `LLM 未配置：${err}` });
+        log.emit('error', { where: 'chat', msg: `LLM/保险库：${err}` });
         return;
       }
     }
@@ -159,10 +180,10 @@ export function mountChatMode({ logger, store, backend } = {}) {
   });
 
   poller.onNewReply(async ({ convId, seq, text, messages }) => {
-    const cfg = chatStore.getConfig();
+    const cfg = effectiveConfig();
     if (!cfg.autoReplyEnabled) return;
     log.emit('error', { where: 'chat', msg: `检测到 HR 回复：${String(text).slice(0, 40)}` });
-    const err = validateLlmConfig(cfg);
+    const err = assertLlmReady(cfg);
     if (err) {
       log.emit('error', { where: 'llm', msg: err });
       return;
@@ -247,6 +268,8 @@ export function mountChatMode({ logger, store, backend } = {}) {
   return {
     logger: log,
     store: chatStore,
+    vault: vaultStore,
+    effectiveConfig,
     controls,
     onDraft,
     getDrafts: () => drafts.slice(),
@@ -276,6 +299,13 @@ export function bootChatIfNeeded() {
     controls: chat.controls,
     configFields: CHAT_FIELDS
   });
+
+  const drawerEl =
+    ui.root?.querySelector?.('.ra-drawer') || document.querySelector('#ra-root .ra-drawer');
+  if (drawerEl) {
+    // 传入 vault-aware store：setup/改 PIN 后走同一套 scrub（敏感路径写空）
+    mountVaultPanel(drawerEl, { vault: chat.vault, chatStore: chat.store });
+  }
   chat.onDraft((d, all) => {
     logger.emit('apply', {
       title: d.name,
