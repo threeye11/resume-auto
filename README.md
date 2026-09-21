@@ -1,8 +1,57 @@
 # resume-auto
 
-Tampermonkey 用户脚本：招聘站筛选批量投递 + BOSS 聊天页闭环沟通。
+Tampermonkey 用户脚本：招聘站筛选批量投递 + BOSS 聊天页闭环沟通 + PIN 保险库。
 
 **已适配：** BOSS直聘（投递 + 聊天页）· 前程无忧（投递）
+
+---
+
+## 快速使用（5 分钟）
+
+### 1. 安装脚本
+
+```powershell
+git clone https://github.com/threeye11/resume-auto.git
+cd resume-auto
+npm install
+npm run build
+```
+
+1. 装 [篡改猴](https://www.tampermonkey.net/)
+2. 把 `dist/resume-auto.user.js` 拖入扩展，或新建脚本粘贴内容并保存
+3. 刷新招聘站，右下角出现 **resume-auto**
+
+### 2. 列表页批量投递
+
+1. 登录 BOSS / 51job，先用**站内筛选**收窄职位
+2. 浮层 → **配置**
+   - 职位名：`嵌入式,硬件`（逗号分隔）
+   - 日配额：先 `5`
+   - 可选：自动翻页 + 最大页数
+3. **开始** → 看日志 `#i … ok`
+4. BOSS 只点「立即沟通」+「留在此页」；51job 只点「投递」
+
+### 3. 聊天页闭环（仅 BOSS）
+
+1. 打开 https://www.zhipin.com/web/geek/chat  
+2. 浮层 → 配置 → 保险库：**输入 PIN →「设置 PIN 并加密现有敏感项」**
+3. 填简历 Markdown（解锁后保存进保险库）
+4. 可选：LLM `baseUrl` / `model` / `apiKey`（如 DeepSeek，OpenAI 兼容）
+5. 勾选 **主动问候开关**（`custom` 填 2–3 句；或 `llm`）
+6. 可选勾选 **HR回复自动起草** → 有回复时生成草稿，点 **发送**
+7. **开始**；超时或手动「锁定」后需再输 PIN
+
+**注意：** PIN 不落盘；忘记 PIN →「重置保险库」并自行轮换 API Key。自动锁定分钟数可配，**上限 30 天**。
+
+### 常用命令
+
+| 命令 | 作用 |
+|------|------|
+| `npm run build` | 产出 `dist/resume-auto.user.js` |
+| `npm test` | 单元测试 |
+| `npm run dev` | 浮层 UI 本地预览 |
+
+设计文档：`docs/compose/spec/hr-chat.md`、`docs/compose/spec/secure-secrets.md`
 
 ---
 
