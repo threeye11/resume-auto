@@ -4,6 +4,7 @@ import {
   chatComplete,
   renderTemplate,
   maskApiKey,
+  testConnection,
   DEFAULT_SYSTEM_TEMPLATE
 } from '../src/core/llm.js';
 
@@ -81,6 +82,49 @@ test('缺 apiKey 抛错', async () => {
 
 test('默认模板含 scene 占位', () => {
   assert.ok(DEFAULT_SYSTEM_TEMPLATE.includes('{scene}'));
+});
+
+test('testConnection 成功：只发一条 ping，不带简历上下文', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url, init });
+    return { ok: true, status: 200, text: async () => '', json: async () => ({}) };
+  };
+  const r = await testConnection(
+    { baseUrl: 'https://api.example.com/v1/', apiKey: 'sk-test', model: 'deepseek-chat' },
+    { fetchImpl }
+  );
+  assert.equal(r.ok, true);
+  assert.equal(calls[0].url, 'https://api.example.com/v1/chat/completions');
+  const body = JSON.parse(calls[0].init.body);
+  assert.equal(body.messages.length, 1);
+  assert.equal(body.messages[0].content, 'ping');
+  assert.ok(calls[0].init.headers.Authorization.includes('sk-test'));
+  assert.ok(r.detail.includes('deepseek-chat'));
+});
+
+test('testConnection 缺参数：不发请求直接失败', async () => {
+  let called = 0;
+  const fetchImpl = async () => {
+    called += 1;
+    return { ok: true, status: 200, text: async () => '' };
+  };
+  const r = await testConnection({ baseUrl: '', apiKey: 'k', model: 'm' }, { fetchImpl });
+  assert.equal(r.ok, false);
+  assert.match(r.detail, /baseUrl/);
+  assert.equal(called, 0);
+});
+
+test('testConnection HTTP 失败：detail 带状态码', async () => {
+  const fetchImpl = async () => ({
+    ok: false,
+    status: 401,
+    text: async () => 'invalid api key'
+  });
+  const r = await testConnection({ baseUrl: 'https://x', apiKey: 'k', model: 'm' }, { fetchImpl });
+  assert.equal(r.ok, false);
+  assert.match(r.detail, /401/);
+  assert.match(r.detail, /invalid api key/);
 });
 
 void memBackend;

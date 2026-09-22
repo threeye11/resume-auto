@@ -2,7 +2,7 @@ import { mountTerminal } from '../terminal/terminal.js';
 import { CHAT_FIELDS } from '../terminal/config-drawer.js';
 import { createLogger } from '../../core/logger.js';
 import { createChatStore, validateLlmConfig } from '../../core/chatStore.js';
-import { chatComplete } from '../../core/llm.js';
+import { chatComplete, testConnection, maskApiKey } from '../../core/llm.js';
 import { gmBackend } from '../../core/store.js';
 import {
   isChatPage,
@@ -24,6 +24,14 @@ function memBackend() {
     set: (k, v) => m.set(k, v),
     del: (k) => m.delete(k)
   };
+}
+
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 export function mountChatMode({ logger, store, backend, vault } = {}) {
@@ -240,12 +248,22 @@ export function mountChatMode({ logger, store, backend, vault } = {}) {
     log.emit('greet', { status: 'skip-draft' });
   }
 
-  function escapeHtml(s) {
-    return String(s ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+  /** 配置抽屉「测试连通性」：表单留空的字段回落到已存配置/保险库 */
+  async function testLlm(rawPartial) {
+    const cfg = effectiveConfig();
+    const f = rawPartial?.llm || {};
+    const typedKey = String(f.apiKey || '').trim();
+    const merged = {
+      baseUrl: String(f.baseUrl || '').trim() || cfg.llm?.baseUrl || '',
+      apiKey: typedKey || cfg.llm?.apiKey || '',
+      model: String(f.model || '').trim() || cfg.llm?.model || ''
+    };
+    const r = await testConnection(merged);
+    const src = typedKey ? '表单新 Key' : merged.apiKey ? (vaultStore.isUnlocked() ? '保险库 Key' : '已存 Key') : '无 Key';
+    log.emit('scan', {
+      note: `LLM 测试 ${r.ok ? '通过' : '失败'} · ${src} ${maskApiKey(merged.apiKey)} · ${r.detail}`
+    });
+    return r;
   }
 
   const controls = {
@@ -271,6 +289,7 @@ export function mountChatMode({ logger, store, backend, vault } = {}) {
     vault: vaultStore,
     effectiveConfig,
     controls,
+    testLlm,
     onDraft,
     getDrafts: () => drafts.slice(),
     drafts,
@@ -297,14 +316,16 @@ export function bootChatIfNeeded() {
       updateConfig: (p) => chat.store.updateConfig(p)
     },
     controls: chat.controls,
-    configFields: CHAT_FIELDS
+    configFields: CHAT_FIELDS,
+    onTestLlm: chat.testLlm
   });
 
-  const drawerEl =
-    ui.root?.querySelector?.('.ra-drawer') || document.querySelector('#ra-root .ra-drawer');
-  if (drawerEl) {
+  const shadow = ui.shadow;
+  // 插进抽屉的 ① 号挂载点；拿不到时退回抽屉末尾
+  const vaultHost = ui.slots?.vault || shadow.querySelector('.ra-drawer');
+  if (vaultHost) {
     // 传入 vault-aware store：setup/改 PIN 后走同一套 scrub（敏感路径写空）
-    mountVaultPanel(drawerEl, { vault: chat.vault, chatStore: chat.store });
+    mountVaultPanel(vaultHost, { vault: chat.vault, chatStore: chat.store });
   }
   chat.onDraft((d, all) => {
     logger.emit('apply', {
@@ -316,21 +337,20 @@ export function bootChatIfNeeded() {
   });
 
   function renderDrafts() {
-    let panel = document.getElementById('ra-chat-drafts');
+    let panel = shadow.querySelector('#ra-chat-drafts');
     if (!panel) {
       panel = document.createElement('div');
       panel.id = 'ra-chat-drafts';
-      panel.style.cssText =
-        'padding:8px 12px;border-top:1px solid rgba(255,255,255,.08);max-height:140px;overflow:auto;font-size:12px';
-      ui.root?.appendChild?.(panel) || document.getElementById('ra-root')?.appendChild(panel);
+      panel.className = 'ra-drafts';
+      shadow.appendChild(panel);
     }
     const list = chat.getDrafts();
     panel.innerHTML = list
       .map(
         (d, i) => `
-      <div style="margin-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06);padding-bottom:6px">
-        <div style="color:#a0a0a0">${escapeHtml(d.kind)} · ${escapeHtml(d.name || d.convId)} ${escapeHtml(d.preview || '')}</div>
-        <div style="margin:4px 0;white-space:pre-wrap;color:#e0e0e0">${escapeHtml(String(d.text).slice(0, 160))}</div>
+      <div class="ra-draft">
+        <div class="ra-draft-meta">${escapeHtml(d.kind)} · ${escapeHtml(d.name || d.convId)} ${escapeHtml(d.preview || '')}</div>
+        <div class="ra-draft-text">${escapeHtml(String(d.text).slice(0, 160))}</div>
         <button type="button" class="ra-btn primary" data-draft-send="${i}">发送</button>
         <button type="button" class="ra-btn" data-draft-skip="${i}">跳过</button>
       </div>`
@@ -338,7 +358,7 @@ export function bootChatIfNeeded() {
       .join('');
   }
 
-  document.getElementById('ra-root')?.addEventListener('click', async (e) => {
+  shadow.addEventListener('click', async (e) => {
     const send = e.target.closest?.('[data-draft-send]');
     if (send) {
       const i = Number(send.getAttribute('data-draft-send'));

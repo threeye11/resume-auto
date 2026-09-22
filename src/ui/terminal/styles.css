@@ -1,6 +1,6 @@
 /* resume-auto terminal — layered dark theme */
 
-#ra-root {
+:host {
   --ra-bg-panel: #1e1e24;
   --ra-bg-log: #121212;
   --ra-bg-input: #2c2c35;
@@ -35,7 +35,7 @@
   transition: width 0.3s ease, height 0.3s ease, border-radius 0.3s ease, box-shadow 0.3s ease,
     background 0.3s ease;
 }
-#ra-root * {
+:host * {
   box-sizing: border-box;
 }
 
@@ -234,7 +234,7 @@
   display: none;
   padding: 14px 16px 16px;
   background: var(--ra-bg-panel);
-  max-height: 300px;
+  max-height: min(62vh, 520px);
   overflow: auto;
 }
 .ra-drawer.open {
@@ -261,7 +261,9 @@
   font-weight: 500;
 }
 .ra-drawer input[type='text'],
+.ra-drawer input[type='password'],
 .ra-drawer input[type='number'],
+.ra-drawer select,
 .ra-drawer textarea {
   width: 100%;
   background: var(--ra-bg-input);
@@ -278,8 +280,16 @@
 .ra-drawer input::placeholder,
 .ra-drawer textarea::placeholder {
   color: var(--ra-placeholder);
+  opacity: 0.72;
+  transition: opacity 0.15s ease;
+}
+/* 聚焦即让位：引导文案不该挡住用户正在写的内容 */
+.ra-drawer input:focus::placeholder,
+.ra-drawer textarea:focus::placeholder {
+  opacity: 0;
 }
 .ra-drawer input:focus,
+.ra-drawer select:focus,
 .ra-drawer textarea:focus {
   border-color: var(--ra-accent);
   box-shadow: 0 0 0 2px var(--ra-accent-soft);
@@ -369,7 +379,7 @@
   }
 }
 
-#ra-root.ra-maximized {
+:host(.ra-maximized) {
   left: 0 !important;
   top: 0 !important;
   right: auto !important;
@@ -385,21 +395,21 @@
   box-shadow: none !important;
   z-index: 2147483646;
 }
-#ra-root.ra-maximized .ra-body {
+:host(.ra-maximized) .ra-body {
   max-height: none;
   flex: 1;
   min-height: 0;
 }
-#ra-root.ra-maximized {
+:host(.ra-maximized) {
   display: flex;
   flex-direction: column;
 }
-#ra-root.ra-maximized .ra-actions,
-#ra-root.ra-maximized .ra-drawer {
+:host(.ra-maximized) .ra-actions,
+:host(.ra-maximized) .ra-drawer {
   flex-shrink: 0;
 }
 
-#ra-root.ra-collapsed {
+:host(.ra-collapsed) {
   width: 56px !important;
   height: 56px !important;
   border-radius: 28px !important;
@@ -408,16 +418,103 @@
   box-shadow: none;
   overflow: visible;
 }
-#ra-root.ra-collapsed .ra-header,
-#ra-root.ra-collapsed .ra-status,
-#ra-root.ra-collapsed .ra-body,
-#ra-root.ra-collapsed .ra-actions,
-#ra-root.ra-collapsed .ra-drawer {
+:host(.ra-collapsed) .ra-header,
+:host(.ra-collapsed) .ra-status,
+:host(.ra-collapsed) .ra-body,
+:host(.ra-collapsed) .ra-actions,
+:host(.ra-collapsed) .ra-drawer {
   display: none !important;
 }
-#ra-root.ra-collapsed .ra-ball {
+:host(.ra-collapsed) .ra-ball {
   display: flex;
 }
-#ra-root.ra-collapsed:hover .ra-ball {
+:host(.ra-collapsed):hover .ra-ball {
   filter: brightness(1.06);
+}
+
+/* —— Config: guided sections —— */
+.ra-section {
+  margin: 16px 0 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ra-border);
+  color: var(--ra-text-strong);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.ra-drawer > .ra-section:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.ra-help {
+  margin: 0 0 10px;
+  color: var(--ra-text-mute);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+.ra-field .ra-help {
+  margin: 4px 0 0;
+}
+.ra-slot {
+  margin: 2px 0 6px;
+}
+.ra-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: -4px 0 12px;
+}
+.ra-action-result {
+  flex: 1;
+  min-width: 130px;
+  color: var(--ra-text-mute);
+  font-size: 11px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+.ra-action-result.ok {
+  color: var(--ra-accent);
+}
+.ra-action-result.fail {
+  color: var(--ra-danger);
+}
+.ra-reveal {
+  float: right;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ra-text-mute);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 400;
+  cursor: pointer;
+}
+.ra-reveal:hover {
+  background: transparent;
+  color: var(--ra-text-strong);
+}
+
+/* —— Chat drafts panel —— */
+.ra-drafts {
+  padding: 8px 12px;
+  border-top: 1px solid var(--ra-border);
+  max-height: 160px;
+  overflow: auto;
+  font-size: 12px;
+}
+.ra-draft {
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ra-draft-meta {
+  color: var(--ra-text-dim);
+}
+.ra-draft-text {
+  margin: 4px 0;
+  color: var(--ra-text);
+  white-space: pre-wrap;
 }

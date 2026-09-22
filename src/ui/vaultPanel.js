@@ -67,7 +67,8 @@ export function createVaultAwareChatStore(chatStore, vault) {
     const merged = mergePartial(base, partial);
 
     if (!vault.isEnabled()) {
-      return chatStore.updateConfig(partial);
+      // 必须合并后再写：chatStore 对 llm 是整对象替换，直接传 partial 会把省略的 apiKey 清成默认值
+      return chatStore.updateConfig(merged);
     }
 
     const { picked, anyNonEmpty } = pickSensitivePaths(partial || {});
@@ -120,7 +121,7 @@ export function mountVaultPanel(
 
   const pin = document.createElement('input');
   pin.type = 'password';
-  pin.placeholder = 'PIN（不保存到磁盘）';
+  pin.placeholder = '例：4–12 位数字或短语';
   pin.autocomplete = 'off';
   pin.style.cssText =
     'width:100%;margin:6px 0;padding:6px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#e0e0e0';
@@ -129,17 +130,27 @@ export function mountVaultPanel(
   timeout.type = 'number';
   timeout.min = '1';
   timeout.max = String(vault.MAX_LOCK_TIMEOUT_MIN || 43200);
-  timeout.placeholder = '自动锁定分钟（默认15，≤43200）';
+  timeout.placeholder = '例：15';
   timeout.value = String(vault.getLockTimeoutMin());
   timeout.style.cssText = pin.style.cssText;
 
   const oldPin = document.createElement('input');
   oldPin.type = 'password';
-  oldPin.placeholder = '旧 PIN（修改 PIN 时填写）';
+  oldPin.placeholder = '仅修改 PIN 时填写';
   oldPin.style.cssText = pin.style.cssText;
 
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px';
+
+  function labelled(inputEl, text) {
+    const lab = document.createElement('div');
+    lab.className = 'ra-help';
+    lab.textContent = text;
+    const box = document.createElement('div');
+    box.className = 'ra-field';
+    box.append(lab, inputEl);
+    return box;
+  }
 
   function btn(label, cls) {
     const b = document.createElement('button');
@@ -231,7 +242,13 @@ export function mountVaultPanel(
   });
 
   row.append(setupBtn, unlockBtn, lockBtn, changeBtn, resetBtn);
-  wrap.append(pin, oldPin, timeout, row, status);
+  wrap.append(
+    labelled(pin, 'PIN（只用于派生密钥，不写入任何存储；解锁后内存保留到超时或手动锁定）'),
+    labelled(oldPin, '旧 PIN（仅「修改 PIN」时需要）'),
+    labelled(timeout, '自动锁定分钟（默认 15，上限 43200 = 30 天）'),
+    row,
+    status
+  );
   rootEl.appendChild(wrap);
   refreshStatus();
 

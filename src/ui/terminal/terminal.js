@@ -32,19 +32,24 @@ function clamp(n, min, max) {
   return Math.min(Math.max(n, min), max);
 }
 
-export function mountTerminal({ logger, store, controls, configFields } = {}) {
+export function mountTerminal({ logger, store, controls, configFields, onTestLlm } = {}) {
   const existing = document.getElementById('ra-root');
-  if (existing) return existing;
+  if (existing?.__raApi) return existing.__raApi;
 
-  const style = document.createElement('style');
-  style.textContent = styles;
-  document.head.appendChild(style);
-
-  const root = document.createElement('div');
+  const root = existing || document.createElement('div');
   root.id = 'ra-root';
   root.setAttribute('role', 'region');
   root.setAttribute('aria-label', 'resume-auto 控制台');
-  root.innerHTML = `
+  if (!existing) document.body.appendChild(root);
+
+  // 关键：控件全部落在 shadow root 内，页面自身脚本无法 querySelector 读到输入值
+  const shadow = root.shadowRoot || root.attachShadow({ mode: 'open' });
+  const style = document.createElement('style');
+  style.textContent = styles;
+  shadow.appendChild(style);
+
+  const tpl = document.createElement('template');
+  tpl.innerHTML = `
     <div class="ra-header">
       <span class="ra-title" id="ra-title">
         <span class="ra-title-dot" aria-hidden="true"></span>
@@ -79,17 +84,21 @@ export function mountTerminal({ logger, store, controls, configFields } = {}) {
       <span class="ra-ball-code" id="ra-ball-code">RA</span>
     </div>
   `;
-  document.body.appendChild(root);
+  for (const node of Array.from(tpl.content.children)) shadow.appendChild(node);
 
-  const body = root.querySelector('#ra-body');
-  const emptyEl = root.querySelector('#ra-empty');
-  const statusEl = root.querySelector('#ra-status');
-  const titleText = root.querySelector('#ra-title-text');
-  const ballEl = root.querySelector('#ra-ball');
-  const ballCode = root.querySelector('#ra-ball-code');
-  const header = root.querySelector('.ra-header');
-  const maxBtn = root.querySelector('[data-act="maximize"]');
-  const drawer = mountConfigDrawer(root, { store, fields: configFields });
+  const body = shadow.querySelector('#ra-body');
+  const emptyEl = shadow.querySelector('#ra-empty');
+  const statusEl = shadow.querySelector('#ra-status');
+  const titleText = shadow.querySelector('#ra-title-text');
+  const ballEl = shadow.querySelector('#ra-ball');
+  const ballCode = shadow.querySelector('#ra-ball-code');
+  const header = shadow.querySelector('.ra-header');
+  const maxBtn = shadow.querySelector('[data-act="maximize"]');
+  const drawer = mountConfigDrawer(shadow, {
+    store,
+    fields: configFields,
+    onTestLlm
+  });
 
   let statusText = '空闲';
   let collapsed = false;
@@ -242,7 +251,7 @@ export function mountTerminal({ logger, store, controls, configFields } = {}) {
   enableDrag(header);
   enableDrag(ballEl);
 
-  root.addEventListener('click', (e) => {
+  shadow.addEventListener('click', (e) => {
     if (collapsed) {
       if (suppressClick) return;
       setCollapsed(false);
@@ -305,14 +314,19 @@ export function mountTerminal({ logger, store, controls, configFields } = {}) {
   // 初始 right/bottom 定位，视口变化时再夹紧
   requestAnimationFrame(() => clampToViewport());
 
-  return {
+  const api = {
     root,
+    shadow,
+    /** 配置抽屉内的挂载点，如 slots.vault */
+    slots: drawer.slots || {},
     setStatus,
     unmount: () => {
       un();
       window.removeEventListener('resize', onResize);
       root.remove();
-      style.remove();
+      delete root.__raApi;
     }
   };
+  root.__raApi = api;
+  return api;
 }

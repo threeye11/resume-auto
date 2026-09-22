@@ -123,3 +123,42 @@ export async function chatComplete(cfg, ctx, deps = {}) {
     clearTimeout(timer);
   }
 }
+
+/**
+ * 连通性探测：只发一条极小请求验证 baseUrl / apiKey / model，不带简历上下文。
+ * 不抛异常，统一返回 { ok, latencyMs, detail }。
+ */
+export async function testConnection(cfg, deps = {}) {
+  const fetchImpl = deps.fetchImpl || defaultFetchImpl();
+  const started = Date.now();
+  const done = (ok, detail) => ({ ok, latencyMs: Date.now() - started, detail });
+
+  if (!fetchImpl) return done(false, 'fetch unavailable');
+  const baseUrl = String(cfg?.baseUrl || '').replace(/\/+$/, '');
+  const apiKey = String(cfg?.apiKey || '');
+  const model = String(cfg?.model || '');
+  if (!baseUrl) return done(false, '缺少 llm.baseUrl');
+  if (!apiKey) return done(false, '缺少 llm.apiKey（保险库锁定时请先解锁）');
+  if (!model) return done(false, '缺少 llm.model');
+
+  try {
+    const res = await fetchImpl(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 8,
+        temperature: 0
+      })
+    });
+    const body = await res.text().catch(() => '');
+    if (!res.ok) return done(false, `HTTP ${res.status}: ${body.slice(0, 160)}`);
+    return done(true, `${model} · ${res.status}`);
+  } catch (e) {
+    return done(false, e?.message || String(e));
+  }
+}

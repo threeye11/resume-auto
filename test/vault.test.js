@@ -192,6 +192,22 @@ test('vault-aware store keeps secrets out of GM config', async () => {
   );
 });
 
+test('vault 未启用时部分保存不清空已存 apiKey', async () => {
+  const { createChatStore } = await import('../src/core/chatStore.js');
+  const { createVaultAwareChatStore } = await import('../src/ui/vaultPanel.js');
+  const backend = memBackend();
+  const raw = createChatStore(backend);
+  const aware = createVaultAwareChatStore(raw, createVaultStore(backend));
+
+  await aware.updateConfig({ llm: { apiKey: 'sk-keep', model: 'm1', baseUrl: 'https://x' } });
+  // 掩码框留空 → 抽屉只提交非敏感项，chatStore 的 llm 整对象替换不得抹掉 apiKey
+  await aware.updateConfig({ llm: { baseUrl: 'https://y' } });
+
+  assert.equal(raw.getConfig().llm.apiKey, 'sk-keep');
+  assert.equal(raw.getConfig().llm.model, 'm1');
+  assert.equal(raw.getConfig().llm.baseUrl, 'https://y');
+});
+
 test('blankSensitivePaths + aware scrub clears GM', async () => {
   const { createChatStore } = await import('../src/core/chatStore.js');
   const { createVaultAwareChatStore, blankSensitivePaths } = await import('../src/ui/vaultPanel.js');

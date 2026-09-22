@@ -8,7 +8,7 @@ export default defineConfig({
       userscript: {
         name: 'resume-auto · 招聘站自动投递与沟通',
         namespace: 'https://github.com/local/resume-auto',
-        version: '0.3.0',
+        version: '0.4.0',
         description: 'BOSS/51job 批量投递 + BOSS 聊天页主动问候与回复草稿',
         author: 'local',
         match: ['https://www.zhipin.com/*', 'https://we.51job.com/*', 'https://*.51job.com/*'],
